@@ -1,6 +1,6 @@
 /* Network-first service worker: always tries for fresh content,
    falls back to the cached copy when offline. Bump VERSION to reset. */
-const VERSION = "waypoint-v2";
+const VERSION = "waypoint-v3";
 // App shell. Content files are cached as they're fetched on first load.
 const CORE = [
   "./", "index.html", "css/style.css", "js/app.js",

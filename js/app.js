@@ -514,6 +514,26 @@
   /* ---------------------------------------------------------
      Layout pieces
      --------------------------------------------------------- */
+  // Page header: small kicker, wide display title, hairline rule with accent tick.
+  function pageHead(kicker, title, opts = {}) {
+    const pager = opts.pager ? `<span class="pager">${Array.from({ length: opts.pager[1] }, (_, i) => `<i class="${i === opts.pager[0] ? "on" : ""}"></i>`).join("")}</span>` : "";
+    return `<header class="ph"><div class="ph-kicker">${esc(kicker)} //</div>
+      <div class="ph-row"><h1 class="ph-title ${opts.long ? "long" : ""}">${esc(title)}</h1>${pager}</div>
+      <div class="ph-rule"><span></span></div></header>`;
+  }
+  // Icon inside a circular progress arc (commendation style).
+  function ringIcon(icon, pct, size = "") {
+    const r = 44, c = 2 * Math.PI * r;
+    const p = Math.max(0, Math.min(1, pct || 0));
+    return `<span class="ringicon ${size}"><svg class="r" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="r-track" cx="50" cy="50" r="${r}" fill="none" stroke-width="3"/>
+      ${p > 0 ? `<circle class="r-arc ${p >= 1 ? "done" : ""}" cx="50" cy="50" r="${r}" fill="none" stroke-width="5" stroke-linecap="butt" stroke-dasharray="${c * p} ${c}"/>` : ""}
+      </svg><span class="r-ico">${icon}</span></span>`;
+  }
+  function topicPct(p, t) {
+    if (!p) return 0;
+    return t.lessons.filter((l) => p.lessons[l.id] && p.lessons[l.id].done).length / t.lessons.length;
+  }
   function topbar(p) {
     return `<header class="topbar">
       <a class="brand" href="#/"><span class="brand-mark">${I.logo}</span><span class="brand-name">WAYPOINT</span></a>
@@ -583,14 +603,12 @@
     }
     step = Math.max(1, Math.min(3, +step || 1));
     const base = editing ? "#/edit/" : "#/setup/";
-    const ind = `<div class="steps-ind">${[1, 2, 3].map((n) => `<span class="${n <= step ? "on" : ""}"></span>`).join("")}</div>`;
     const backHref = step > 1 ? base + (step - 1) : editing ? "#/profile" : Object.keys(db.profiles).length ? "#/pilots" : "#/welcome";
     let body = "";
     if (step === 1) {
       body = `
-        <div class="label accent">Step 1 of 3 · Identity</div>
-        <h1 class="lesson-title">Choose your callsign</h1>
-        <p class="muted">This is the name shown on your profile.</p>
+        ${pageHead("Step 1 of 3 · Identity", "Callsign", { pager: [0, 3] })}
+        <p class="muted">Choose the name shown on your profile.</p>
         <label class="field"><span class="label">Callsign</span>
           <input class="input" id="cs" maxlength="16" autocomplete="nickname" placeholder="e.g. MAVERICK" value="${esc(draft.callsign)}"></label>
         <div class="field"><span class="label">Insignia</span>
@@ -598,16 +616,14 @@
         <div class="sticky-cta"><button class="btn primary block" id="next" ${draft.callsign.trim() ? "" : "disabled"}>Next ${I.chevR}</button></div>`;
     } else if (step === 2) {
       body = `
-        <div class="label accent">Step 2 of 3 · Interests</div>
-        <h1 class="lesson-title">What do you want to learn?</h1>
+        ${pageHead("Step 2 of 3 · Interests", "Interests", { pager: [1, 3] })}
         <p class="muted">Pick at least two — more is better. Each day you'll choose two of these to study, and you can browse every topic in the Library any time.</p>
         <div style="margin-top:8px"><button class="link-btn" id="all-int">${draft.interests.length === TOPICS.length ? "Clear all" : "Select all"}</button></div>
         ${facultyGrid((t) => draft.interests.includes(t.id))}
         <div class="sticky-cta"><button class="btn primary block" id="next" ${draft.interests.length >= 2 ? "" : "disabled"}>Next ${I.chevR}</button></div>`;
     } else {
       body = `
-        <div class="label accent">Step 3 of 3 · Preferences</div>
-        <h1 class="lesson-title">How do you like to train?</h1>
+        ${pageHead("Step 3 of 3 · Preferences", "Training", { pager: [2, 3] })}
         <p class="muted">Your preferred drill is highlighted after each brief. You can try every drill on any lesson.</p>
         <div class="field"><span class="label">Preferred drill</span>
           <div class="opt-list">${Object.entries(DRILLS).map(([k, d]) => `<button class="opt" data-drill="${k}" aria-pressed="${draft.drill === k}">${d.icon}<span><b>${d.name}</b><small>${d.desc}</small></span></button>`).join("")}</div></div>
@@ -615,7 +631,7 @@
           <div class="seg"><button data-mode-theme="dark" aria-pressed="${draft.theme === "dark"}">Dark</button><button data-mode-theme="light" aria-pressed="${draft.theme === "light"}">Light</button></div></div>
         <div class="sticky-cta"><button class="btn primary block" id="next">${editing ? "Save changes" : "Begin training"} ${I.chevR}</button></div>`;
     }
-    view(`${topbar(null)}<a class="back" href="${backHref}">${I.back} Back</a>${ind}${body}`, null);
+    view(`${topbar(null)}<a class="back" href="${backHref}">${I.back} Back</a>${body}`, null);
 
     const cs = $("#cs");
     if (cs) {
@@ -679,17 +695,16 @@
   function topicOpt(t, on, disabled) {
     return `<button class="topic-opt" data-topic="${t.id}" aria-pressed="${!!on}" ${disabled ? "disabled" : ""}>
       <span class="check">${I.check}</span>
-      <span class="t-icon">${topicIcon(t.id)}</span>
+      ${ringIcon(topicIcon(t.id), topicPct(P(), t))}
       <span class="t-name">${esc(t.name)}</span>
-      <span class="t-meta">${t.lessons.length} lessons · ${esc(t.code)}</span>
+      <span class="t-meta mono-num">${P() ? t.lessons.filter((l) => P().lessons[l.id] && P().lessons[l.id].done).length + " / " : ""}${t.lessons.length} lessons</span>
     </button>`;
   }
 
   function vPilots() {
     const list = Object.values(db.profiles);
     view(`${topbar(null)}
-      <div class="label accent">Profiles</div>
-      <h1 class="lesson-title">Who's flying today?</h1>
+      ${pageHead("Who's flying today?", "Profiles")}
       <div class="pilot-list" style="margin-top:18px">
         ${list.map((p) => { const r = rankFor(p.xp); return `<button class="pilot-row ${p.id === db.active ? "cur" : ""}" data-pid="${p.id}">
           <span class="insignia lg">${INSIGNIA[p.insignia]}</span><span><b>${esc(p.callsign)}</b><small>${r.cur.name} · ${p.xp} XP</small></span></button>`; }).join("")}
@@ -715,20 +730,21 @@
     const due = dueCards(p).length;
     const accuracy = p.stats.answered ? Math.round((100 * p.stats.correct) / p.stats.answered) : null;
 
-    const hud = `<section class="panel brackets">
+    const hud = `${pageHead(fmtDate(today()), "Today")}
+    <section class="panel brackets">
       <div class="hud">
-        <div class="rank-badge">${rankBadge(r.i)}</div>
+        <div class="lvl"><span class="label">Level</span><b class="mono-num">${r.i + 1}</b></div>
         <div>
-          <div class="label">Rank</div>
+          <div class="label">Current rank</div>
           <div class="hud-title">${r.cur.name}</div>
           <div class="xpbar"><span style="width:${Math.round(r.pct * 100)}%"></span></div>
           <div class="tiny muted mono-num">${r.next ? `${p.xp} / ${r.next.xp} XP · next: ${r.next.name}` : `${p.xp} XP · highest rank`}</div>
         </div>
       </div>
-      <div class="hud-stats">
-        <div class="hud-stat"><span class="label">Streak</span><b class="${streak ? "accent" : ""}">${streak}<small class="tiny muted"> day${streak === 1 ? "" : "s"}</small></b></div>
-        <div class="hud-stat"><span class="label">Lessons</span><b>${p.stats.lessons}</b></div>
-        <div class="hud-stat"><span class="label">Accuracy</span><b>${accuracy === null ? "—" : accuracy + "%"}</b></div>
+      <div class="statrow">
+        <div class="statcell"><span class="label">Streak</span><b class="${streak ? "accent" : ""}">${streak}<small>day${streak === 1 ? "" : "s"}</small></b></div>
+        <div class="statcell"><span class="label">Lessons</span><b>${p.stats.lessons}<small class="dim">/${TOTAL_LESSONS}</small></b></div>
+        <div class="statcell"><span class="label">Accuracy</span><b>${accuracy === null ? "—" : accuracy + "<small>%</small>"}</b></div>
       </div>
     </section>`;
 
@@ -737,7 +753,7 @@
       if (!pickDraft || pickDraft.date !== today()) pickDraft = { date: today(), sel: suggestedTopics(p), all: false };
       const only = pickDraft.all || p.interests.length < 2 ? null : p.interests;
       mission = `<section class="section">
-        <div class="section-head"><h2>Plan today's mission</h2><span class="label hud">${fmtDate(today())}</span></div>
+        <div class="section-head"><h2>Plan today's mission</h2><span class="label hud">Pick 2</span></div>
         <p class="muted small" style="margin:-4px 0 14px">Select <b>two</b> topics. You'll get one lesson from each — and can swap either one if it doesn't grab you.</p>
         ${facultyGrid((t) => pickDraft.sel.includes(t.id), (t) => !pickDraft.sel.includes(t.id) && pickDraft.sel.length >= 2, only)}
         <div style="margin:12px 0 16px">${p.interests.length < TOPICS.length ? `<button class="link-btn" id="toggle-all">${pickDraft.all ? "Show my interests only" : "Show all topics"}</button>` : ""}</div>
@@ -748,7 +764,7 @@
       const anyStarted = ids.some((id) => started(p, id));
       const firstOpen = ids.findIndex((id) => !(p.lessons[id] && p.lessons[id].done));
       mission = `<section class="section">
-        <div class="section-head"><h2>Today's mission</h2><span class="label hud">${fmtDate(today())}</span></div>
+        <div class="section-head"><h2>Today's mission</h2><span class="label hud">${ids.filter((id) => p.lessons[id] && p.lessons[id].done).length} / ${ids.length} cleared</span></div>
         ${d.done ? `<div class="panel complete-banner" style="margin-bottom:16px">${I.okc}<div><div class="label" style="color:var(--ok)">Mission complete</div><div>Both waypoints cleared. Streak: <b>${streak} day${streak === 1 ? "" : "s"}</b>. Come back tomorrow for your next mission.</div></div></div>` : ""}
         <div class="route">
           ${ids.map((id, n) => wpCard(p, id, n, n === firstOpen)).join("")}
@@ -817,8 +833,11 @@
       <a class="panel wp-card" href="${href}">
         <div class="wp-head"><span class="label ${active ? "accent" : ""}">Waypoint ${n + 1} · ${esc(t.name)}</span>
           ${done ? `<span class="tag ok">Done</span>` : `<span class="tag">${l.minutes} min</span>`}</div>
-        <div class="wp-title">${esc(l.title)}</div>
-        <div class="small muted">Lesson ${l.index + 1} of ${t.lessons.length} · ${l.level}</div>
+        <div class="wp-body" style="margin-top:10px">
+          ${ringIcon(topicIcon(l.topic), done ? 1 : drilled ? 2 / 3 : briefed ? 1 / 3 : 0)}
+          <div><div class="wp-title">${esc(l.title)}</div>
+          <div class="small muted">Lesson ${l.index + 1} of ${t.lessons.length} · ${l.level}</div></div>
+        </div>
         <div class="wp-steps"><span class="wp-step ${briefed ? "ok" : active ? "on" : ""}"></span><span class="wp-step ${drilled ? "ok" : ""}"></span><span class="wp-step ${done ? "ok" : ""}"></span></div>
         <div class="wp-foot"><span class="tiny muted">BRIEF · DRILL · DEBRIEF</span><span class="go">${cta} ${I.chevR}</span></div>
       </a>
@@ -875,8 +894,8 @@
     view(`${topbar(p)}
       <a class="back" href="${fromMission ? "#/" : "#/library"}">${I.back} ${fromMission ? "Mission" : "Library"}</a>
       ${tracker(1)}
-      <div class="meta-row"><span class="tag hud">${esc(t.name)}</span><span class="tag">${l.level}</span><span class="tag">${l.minutes} min read</span></div>
-      <h1 class="lesson-title">${esc(l.title)}</h1>
+      ${pageHead(`${t.name} · Lesson ${l.index + 1} of ${t.lessons.length}`, l.title, { long: true })}
+      <div class="meta-row"><span class="tag">${l.level}</span><span class="tag">${l.minutes} min read</span>${rec.done ? '<span class="tag ok">Completed</span>' : ""}</div>
       ${l.hook ? `<p class="hook">${esc(l.hook)}</p>` : ""}
       <section class="panel bluf"><div class="label accent">The short version</div><p>${esc(l.bluf)}</p></section>
       ${l.story ? `<section class="section story"><div class="section-head"><h2>The full picture</h2></div>${storyHtml(l.story)}</section>` : ""}
@@ -903,7 +922,7 @@
           <p>${esc(l.talk)}</p>
           <button class="btn ghost" id="share" style="margin-top:12px">${I.share} Share</button></div>
       </section>` : ""}
-      <div class="sticky-cta"><button class="btn primary block" id="done-brief">${rec.brief ? "Go to drill" : "Done reading — start drill"} ${I.chevR}</button></div>
+      <div class="end-cta"><button class="btn primary block" id="done-brief">${rec.brief ? "Go to drill" : "Done reading — start drill"} ${I.chevR}</button></div>
     `, fromMission ? "today" : "library");
     const ta = $("#note");
     if (ta) ta.addEventListener("input", () => {
@@ -1150,8 +1169,7 @@
     const boxes = [1, 2, 3, 4, 5, 6].map((b) => Object.values(p.cards).filter((c) => c.box === b).length);
     const done = Object.keys(p.lessons).filter((id) => p.lessons[id].done).length;
     view(`${topbar(p)}
-      <div class="label accent">Review</div>
-      <h1 class="lesson-title">Keep it in memory</h1>
+      ${pageHead("Memory", "Review")}
       <p class="muted">Cards you know well come back less often. Cards you miss come back tomorrow.</p>
       <section class="section">
         <div class="stats-grid">
@@ -1261,8 +1279,7 @@
     const p = P();
     const doneAll = Object.keys(p.lessons).filter((id) => p.lessons[id].done && LESSON_BY_ID[id]).length;
     view(`${topbar(p)}
-      <div class="label accent">Library</div>
-      <h1 class="lesson-title">Your pocket university</h1>
+      ${pageHead("Pocket university", "Library")}
       <p class="muted">${TOPICS.length} topics · ${TOTAL_LESSONS} lessons · ${doneAll} completed. Read anything, any time — extra lessons earn XP too.</p>
       <input class="input search" id="lib-q" type="search" placeholder="Search lessons…" value="${esc(libQuery)}" autocomplete="off">
       <div id="lib-body"></div>`, "library");
@@ -1278,7 +1295,7 @@
           const doneN = t.lessons.filter((l) => p.lessons[l.id] && p.lessons[l.id].done).length;
           const mine = p.interests.includes(t.id);
           return `<details class="panel topic-block" ${q ? "open" : ""}>
-            <summary><div class="topic-row"><span class="t-icon">${topicIcon(t.id)}</span>
+            <summary><div class="topic-row">${ringIcon(topicIcon(t.id), doneN / t.lessons.length, "sm")}
               <div style="flex:1"><h3>${esc(t.name)} ${mine ? '<span class="tag accent" style="margin-left:6px">Interest</span>' : ""}</h3>
               <div class="tiny muted">${doneN}/${t.lessons.length} complete</div>
               <div class="mini-bar"><span style="width:${(100 * doneN) / t.lessons.length}%"></span></div></div></div></summary>
@@ -1316,14 +1333,13 @@
     }
     const earned = PATCHES.filter((b) => p.badges[b.id]).length;
     view(`${topbar(p)}
-      <div class="label accent">Logbook</div>
-      <h1 class="lesson-title">Flight record</h1>
-      <div class="stats-grid" style="margin-top:16px">
-        <div class="stat"><span class="label">Total XP</span><b class="mono-num" style="color:var(--accent)">${p.xp}</b></div>
-        <div class="stat"><span class="label">Streak / best</span><b class="mono-num">${streakNow(p)} / ${p.streak.best}</b></div>
-        <div class="stat"><span class="label">Lessons</span><b class="mono-num">${p.stats.lessons}<small class="tiny muted"> / ${TOTAL_LESSONS}</small></b></div>
-        <div class="stat"><span class="label">Accuracy</span><b class="mono-num">${acc}</b></div>
-      </div>
+      ${pageHead("Service record", "Logbook")}
+      <section class="panel"><div class="statrow four" style="margin-top:0">
+        <div class="statcell"><span class="label">Total XP</span><b class="accent">${p.xp}</b></div>
+        <div class="statcell"><span class="label">Streak</span><b>${streakNow(p)}<small class="dim">/ ${p.streak.best} best</small></b></div>
+        <div class="statcell"><span class="label">Lessons</span><b>${p.stats.lessons}<small class="dim">/${TOTAL_LESSONS}</small></b></div>
+        <div class="statcell"><span class="label">Accuracy</span><b>${acc}</b></div>
+      </div></section>
       <section class="section">
         <div class="section-head"><h2>Last 4 weeks</h2><span class="label">${Object.values(p.days).filter((d) => d.done).length} missions</span></div>
         <div class="panel"><div class="heat">${cells.join("")}</div>
@@ -1352,6 +1368,7 @@
     const p = P();
     const r = rankFor(p.xp);
     view(`${topbar(p)}
+      ${pageHead("Pilot profile", p.callsign)}
       <section class="panel brackets" style="display:flex;gap:16px;align-items:center">
         <span class="insignia lg">${INSIGNIA[p.insignia]}</span>
         <div><div class="label">Callsign</div><div class="hud-title">${esc(p.callsign)}</div><div class="small muted">${r.cur.name} · since ${p.created}</div></div>
