@@ -533,3 +533,34 @@ details.topic-block summary::-webkit-details-marker { display: none; }
 .empty { text-align: center; padding: 32px 16px; color: var(--muted); }
 .empty svg { width: 44px; height: 44px; margin: 0 auto 12px; color: var(--faint); }
 .footer-note { text-align: center; color: var(--faint); font-size: 12px; margin-top: 32px; }
+
+/* ==========================================================
+   Rich lessons, faculties, swap, library search
+   ========================================================== */
+.faculty { margin-top: 18px; }
+.faculty-name { margin: 0 0 8px; color: var(--hud); }
+.section > .faculty-name { margin-bottom: 10px; }
+.hook { font-size: 18px; color: var(--muted); font-style: italic; margin: 4px 0 0; line-height: 1.5; }
+.story p { font-size: 17px; line-height: 1.7; margin: 0 0 14px; }
+.story .story-h { font-size: 17px; font-weight: 700; margin: 22px 0 8px; color: var(--accent); }
+.story .story-h:first-of-type { margin-top: 4px; }
+.callout.think svg { color: var(--accent); }
+.think-list { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.think-list li { font-size: 16px; }
+.note {
+  width: 100%; margin-top: 6px; padding: 10px 12px; resize: vertical; min-height: 72px;
+  background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 15px; outline: none;
+}
+.note:focus { border-color: var(--accent); }
+.talk { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: linear-gradient(135deg, var(--accent-soft), transparent 70%); }
+.talk-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.talk-head svg { width: 20px; height: 20px; color: var(--accent); }
+.talk p { font-size: 17px; line-height: 1.6; }
+.swap-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 6px; padding: 10px 14px;
+  background: transparent; border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  color: var(--muted); font-size: 14px; font-weight: 600;
+}
+.swap-btn svg { width: 16px; height: 16px; color: var(--hud); }
+.search { margin-top: 16px; font-size: 16px; font-weight: 500; letter-spacing: 0; }
+.modal .opt-list { max-height: 50vh; overflow: auto; }

@@ -25,8 +25,13 @@
   <div id="modal-root"></div>
 
   <script>
-    /* Content registry: each file in /content calls WP.addTopic(). */
-    window.WP = { topics: [], addTopic: function (t) { this.topics.push(t); } };
+    /* Content registry. Each file in /content calls WP.addTopic() or
+       WP.enrich() (extra material for lessons, keyed by lesson id). */
+    window.WP = {
+      topics: [], extras: {},
+      addTopic: function (t) { this.topics.push(t); },
+      enrich: function (m) { for (var k in m) this.extras[k] = Object.assign(this.extras[k] || {}, m[k]); }
+    };
   </script>
   <script src="content/ai.js"></script>
   <script src="content/engineering.js"></script>
@@ -34,6 +39,16 @@
   <script src="content/aerospace.js"></script>
   <script src="content/cyber.js"></script>
   <script src="content/leadership.js"></script>
+  <script src="content/ddia.js"></script>
+  <script src="content/banking.js"></script>
+  <script src="content/economics.js"></script>
+  <script src="content/politics.js"></script>
+  <script src="content/regulation.js"></script>
+  <script src="content/risk.js"></script>
+  <script src="content/extras-ai.js"></script>
+  <script src="content/extras-eng.js"></script>
+  <script src="content/extras-cfa.js"></script>
+  <script src="content/extras-misc.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
