@@ -557,12 +557,13 @@
   function vWelcome() {
     view(`${topbar(null)}
       <section class="hero">
-        <div class="label accent">Daily lessons · 5–10 minutes</div>
+        <div class="label accent">A pocket university · one commute at a time</div>
         <h1>Learn something that matters, every day.</h1>
-        <p>Each day, choose two topics. You get a short brief covering the 20% of the subject that gets you 80% of the way — then drill it until it sticks.</p>
+        <p>${TOTAL_LESSONS} plain-English lessons across ${TOPICS.length} subjects — from AI and data systems to banking, history, HVAC and squash. Each day, pick two topics and learn the 20% that gets you 80% of the way.</p>
       </section>
       <div class="feature-list">
-        <div class="feature"><div class="f-ico">${I.brief}</div><div><b>Brief</b><span>Bottom line up front, key points, a real example and the common trap.</span></div></div>
+        <div class="feature"><div class="f-ico">${I.brief}</div><div><b>Read</b><span>A short version, the full story in simple English, a real example and the common trap.</span></div></div>
+        <div class="feature"><div class="f-ico">${I.chat}</div><div><b>Think and talk</b><span>Questions to mull over on the ride, and one thing worth bringing up with a colleague.</span></div></div>
         <div class="feature"><div class="f-ico">${I.flash}</div><div><b>Drill</b><span>Flashcards, multiple choice, true/false and match-ups.</span></div></div>
         <div class="feature"><div class="f-ico">${I.medal}</div><div><b>Progress</b><span>Earn XP, climb ranks, hold your streak and collect patches.</span></div></div>
       </div>
@@ -756,6 +757,13 @@
       </section>`;
     }
 
+    // Talking points from today's lessons once they've been read.
+    const talks = d ? slots(d).filter((id) => p.lessons[id] && p.lessons[id].brief && LESSON_BY_ID[id].talk) : [];
+    const talkHtml = talks.length ? `<section class="section">
+      <div class="section-head"><h2>Bring it up today</h2><span class="label">Talking points</span></div>
+      ${talks.map((id) => `<div class="panel talk"><div class="talk-head">${I.chat}<div class="label accent">${esc(TOPIC_BY_ID[LESSON_BY_ID[id].topic].name)}</div></div><p>${esc(LESSON_BY_ID[id].talk)}</p></div>`).join("")}
+    </section>` : "";
+
     const review = `<section class="section">
       <div class="section-head"><h2>Stay sharp</h2></div>
       <div class="drill-list">
@@ -766,7 +774,7 @@
       </div>
     </section>`;
 
-    view(topbar(p) + hud + mission + review, "today");
+    view(topbar(p) + hud + mission + talkHtml + review, "today");
 
     $$("[data-topic]").forEach((b) => (b.onclick = () => {
       const id = b.dataset.topic;
