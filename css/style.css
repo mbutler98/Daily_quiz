@@ -36,7 +36,7 @@
   --bad-soft: rgba(255, 107, 107, 0.12);
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
   --radius: 6px;
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Inter", -apple-system, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-ui: "Exo 2", "Inter", system-ui, sans-serif;
   --font-display: "Michroma", "Exo 2", system-ui, sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -146,7 +146,7 @@ svg { display: block; }
 .ph-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
 .ph-title {
   font-family: var(--font-display); font-weight: 400; text-transform: uppercase;
-  font-size: clamp(26px, 7.4vw, 44px); letter-spacing: 0.08em; line-height: 1.12;
+  font-size: clamp(26px, 7.4vw, 44px); letter-spacing: 0.03em; line-height: 1.08;
   color: var(--text);
   text-shadow: 0 0 24px var(--glass-hi);
 }
@@ -395,8 +395,8 @@ svg { display: block; }
 .opt small { color: var(--muted); font-size: 13px; }
 .hero { padding: 36px 0 6px; }
 .hero h1 {
-  font-family: var(--font-display); font-weight: 400; text-transform: uppercase; letter-spacing: 0.06em;
-  font-size: clamp(28px, 7.6vw, 46px); line-height: 1.15; margin: 12px 0 14px;
+  font-family: var(--font-display); font-weight: 400; text-transform: uppercase; letter-spacing: 0.02em;
+  font-size: clamp(28px, 7.6vw, 46px); line-height: 1.1; margin: 12px 0 14px;
 }
 .hero p { color: var(--text-soft); font-size: 18px; max-width: 36em; }
 .feature-list { display: grid; gap: 10px; margin: 28px 0; }
@@ -674,3 +674,168 @@ details.topic-block[open] { box-shadow: var(--hud-glow), var(--shadow); border-c
 .empty { text-align: center; padding: 32px 16px; color: var(--muted); }
 .empty svg { width: 44px; height: 44px; margin: 0 auto 12px; color: var(--faint); }
 .footer-note { text-align: center; color: var(--faint); font-size: 12px; margin-top: 32px; letter-spacing: 0.06em; }
+
+
+/* ==========================================================
+   Today: greeting, two-option photo carousel
+   ========================================================== */
+.greet { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 2px 0 16px; }
+.greet-title { font-family: var(--font-ui); font-weight: 600; font-size: clamp(22px, 6vw, 30px); letter-spacing: -0.01em; line-height: 1.15; margin-top: 4px; }
+.hchips { display: flex; gap: 6px; flex: none; }
+.hchip {
+  display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 999px;
+  background: var(--glass); border: 1px solid var(--line-strong); color: var(--muted);
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.hchip svg { width: 15px; height: 15px; }
+.hchip b { font-size: 15px; color: var(--text); letter-spacing: 0; }
+.hchip.hot { color: var(--hot); border-color: color-mix(in srgb, var(--hot) 45%, transparent); }
+.today .section-head { margin-bottom: 10px; }
+
+/* Native scroll-snap carousel: the browser supplies momentum + snapping. */
+.carousel {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 86%; gap: 12px;
+  overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  margin: 0 -16px; padding: 2px 16px 6px; scroll-padding: 0 16px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.carousel::-webkit-scrollbar { display: none; }
+.carousel > .pcard { scroll-snap-align: start; }
+@media (min-width: 620px) { .carousel { grid-auto-columns: calc(50% - 6px); margin: 0; padding: 2px 0 6px; } }
+.car-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; min-height: 24px; }
+.car-foot .link-btn { font-size: 13px; text-decoration: none; }
+
+/* Photo card */
+.pcard {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+  height: clamp(330px, calc(100vh - 272px), 540px);
+  height: clamp(330px, calc(100svh - 272px), 540px);
+  padding: 16px; border-radius: 22px; color: #fff;
+  background-color: #10203a; background-position: center; background-size: cover; background-repeat: no-repeat;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: transform 120ms ease-out;
+}
+.pcard::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgba(4, 10, 24, 0.82) 0%, rgba(4, 10, 24, 0.62) 38%, rgba(4, 10, 24, 0.22) 62%, rgba(4, 10, 24, 0.4) 80%, rgba(4, 10, 24, 0.78) 100%);
+}
+.pcard.single { height: clamp(330px, calc(100svh - 280px), 520px); }
+.pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pc-kicker { font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.85); }
+.pc-chip {
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+  background: rgba(10, 20, 40, 0.45); border: 1px solid rgba(255,255,255,0.25);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.pc-body { margin-top: -4px; flex: 1; }
+.pc-topic { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.88); }
+.pc-topic svg { width: 16px; height: 16px; color: var(--accent); }
+.pc-title {
+  font-family: var(--font); font-weight: 700; font-size: clamp(26px, 7vw, 32px);
+  line-height: 1.08; letter-spacing: -0.022em; margin: 8px 0 8px; text-shadow: 0 2px 18px rgba(0,0,0,0.35);
+}
+.pc-sub {
+  font-size: 15px; line-height: 1.45; color: rgba(255,255,255,0.9); max-width: 34em;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.4);
+}
+/* Solid action panel keeps the CTA legible over any photo */
+.pc-panel {
+  background: rgba(250, 252, 253, 0.94); color: #0f1d2e; border-radius: 16px; padding: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+.pc-feats { display: flex; align-items: center; gap: 12px; padding: 2px 4px 10px; font-size: 13px; font-weight: 500; color: #3a4b5c; }
+.pc-feats span { display: inline-flex; align-items: center; gap: 5px; }
+.pc-feats svg { width: 16px; height: 16px; color: #0f1d2e; }
+.pc-feats .pc-lv { margin-left: auto; white-space: nowrap; font-family: var(--font-ui); font-size: 12px; color: #6a7b8b; }
+.pc-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 2px 10px; }
+.pc-steps span {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #8a98a6;
+  border-top: 3px solid #d5dde4; padding-top: 6px;
+}
+.pc-steps span.on { color: #a67c00; border-color: #e3b60f; }
+.pc-steps span.ok { color: #12825a; border-color: #2bbf86; }
+.pc-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; border: 0; border-radius: 12px;
+  background: #0d1a2e; color: #fff; text-decoration: none;
+  font-family: var(--font); font-size: 16px; font-weight: 600; letter-spacing: -0.005em;
+  transition: transform 100ms ease-out, background 150ms ease;
+}
+.pc-btn svg { width: 17px; height: 17px; }
+.pcard.is-done .pc-btn { background: #12825a; }
+
+/* Lesson hero photo */
+.lhero {
+  position: relative; isolation: isolate; overflow: hidden; border-radius: 20px; color: #fff;
+  min-height: 210px; padding: 18px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+  background-color: #10203a; background-position: center; background-size: cover; background-repeat: no-repeat; margin-bottom: 4px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+.lhero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(4,10,24,0.1) 0%, rgba(4,10,24,0.45) 45%, rgba(4,10,24,0.88) 100%); }
+.lhero-title { font-family: var(--font); font-weight: 700; font-size: clamp(26px, 7vw, 34px); line-height: 1.1; letter-spacing: -0.022em; }
+.lhero-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.lhero-meta span { font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; background: rgba(10,20,40,0.5); border: 1px solid rgba(255,255,255,0.22); }
+
+/* Library topic banners */
+details.topic-block { padding: 0; overflow: hidden; }
+details.topic-block > :not(summary) { margin-left: 16px; margin-right: 16px; }
+details.topic-block > .lesson-list { margin-bottom: 8px; }
+.tb-banner {
+  position: relative; isolation: isolate; padding: 16px; min-height: 104px; display: flex; align-items: flex-end; color: #fff;
+  background-color: #10203a; background-position: center; background-size: cover; background-repeat: no-repeat;
+}
+.tb-banner::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(4,10,24,0.85) 0%, rgba(4,10,24,0.55) 55%, rgba(4,10,24,0.2) 100%); }
+.tb-banner .topic-row { width: 100%; }
+.tb-banner h3 { color: #fff; }
+.tb-banner .tiny.muted { color: rgba(255,255,255,0.78); }
+.tb-banner .ringicon .r-ico { color: #fff; }
+.tb-banner .ringicon .r-track { stroke: rgba(255,255,255,0.3); }
+.tb-banner .mini-bar { background: rgba(255,255,255,0.25); }
+
+/* ==========================================================
+   Apple-guided interaction details
+   ========================================================== */
+/* Instant press feedback on touch-down (paired with a touchstart listener). */
+.btn:active, .pc-btn:active, .drill-opt:active, .answer:active, .topic-opt:active,
+.opt:active, .chip:active, .def-card:active, .swap-btn:active, .tab:active, .hchip:active {
+  transform: scale(0.97); transition: transform 100ms ease-out;
+}
+.pcard:active { transform: scale(0.985); }
+/* Scroll-edge effect instead of a hard divider above the tab bar. */
+.tabbar { border-top-color: transparent; }
+.tabbar::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -18px; height: 18px; pointer-events: none;
+  background: linear-gradient(to top, color-mix(in srgb, var(--bg-2) 70%, transparent), transparent);
+}
+/* Glass materialises (scale + blur) rather than plain-fading. */
+.modal { animation: materialize 260ms cubic-bezier(.2,.8,.2,1); }
+@keyframes materialize { from { opacity: 0; transform: scale(0.96); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+/* Accessibility: respect transparency and contrast preferences. */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: rgba(14, 27, 52, 0.97); --glass-strong: rgba(10, 20, 40, 0.99); }
+  :root[data-theme="light"] { --glass: rgba(246, 250, 250, 0.98); --glass-strong: rgba(250, 252, 252, 0.99); }
+  .panel, .btn, .tabbar, .toast, .pc-chip, .hchip { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
+@media (prefers-contrast: more) {
+  :root { --line: rgba(200, 225, 255, 0.4); --line-strong: rgba(220, 235, 255, 0.7); --muted: #b6c6d8; --glass: rgba(10, 20, 40, 0.97); }
+  :root[data-theme="light"] { --line: rgba(10, 30, 50, 0.4); --line-strong: rgba(10, 30, 50, 0.7); --muted: #33475a; --glass: #fff; }
+  .pcard::before, .lhero::before { background: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.9)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carousel { scroll-behavior: auto; }
+  .btn:active, .pc-btn:active, .pcard:active { transform: none; }
+}
+
+/* Short phones (e.g. iPhone SE): keep today's start button above the fold. */
+@media (max-height: 700px) {
+  .topbar { padding-bottom: 8px; margin-bottom: 4px; }
+  .greet { margin-bottom: 10px; }
+  .greet-title { font-size: 21px; }
+  .today .section-head { margin-bottom: 8px; padding-bottom: 6px; }
+  .pc-sub { -webkit-line-clamp: 2; }
+  .pc-title { font-size: 25px; margin: 6px 0; }
+  .pc-feats { padding-bottom: 8px; }
+  .pc-btn { min-height: 48px; }
+}

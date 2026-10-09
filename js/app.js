@@ -85,6 +85,15 @@
     { id: "sport", name: "Sport & Body", topics: ["tennis", "squash", "gym"] },
   ];
   const topicIcon = (id) => TOPIC_ICON[id] || I.brief;
+  // Landscape photo per topic (files in /img).
+  const TOPIC_IMG = {
+    ai: "waterfall-ring", ddia: "topo-map", cyber: "storm-rocks", eng: "canyon-machine",
+    cfa: "savanna", bank: "rock-tower", econ: "desert-path", risk: "topo-map", invest: "blue-shore",
+    politics: "forest-tower", reg: "snow-ridge", hist: "forest-ruins", geo: "alpine-stream", philo: "blue-shore",
+    tor: "forest-tower", lead: "rock-tower", strat: "savanna", carp: "forest-ruins", hvac: "snow-ridge",
+    aero: "waterfall-ring", tennis: "desert-path", squash: "storm-rocks", gym: "canyon-machine",
+  };
+  const topicImg = (id) => `img/${TOPIC_IMG[id] || "alpine-stream"}.webp`;
 
   const INSIGNIA = {
     chevron: sv('<path d="M4 11l8-6 8 6"/><path d="M4 17l8-6 8 6"/>', 'stroke-width="2"'),
@@ -158,7 +167,7 @@
 
   const PATCHES = [
     { id: "first", name: "First Sortie", desc: "Complete your first lesson", test: (p) => p.stats.lessons >= 1 },
-    { id: "mission", name: "Mission Complete", desc: "Finish both lessons in a day", test: (p) => Object.values(p.days).some((d) => d.done) },
+    { id: "mission", name: "Mission Complete", desc: "Finish your daily lesson", test: (p) => Object.values(p.days).some((d) => d.done) },
     { id: "s3", name: "Three-Day Run", desc: "Reach a 3-day streak", test: (p) => p.streak.best >= 3 },
     { id: "s7", name: "Full Week", desc: "Reach a 7-day streak", test: (p) => p.streak.best >= 7 },
     { id: "s30", name: "Iron Discipline", desc: "Reach a 30-day streak", test: (p) => p.streak.best >= 30 },
@@ -276,48 +285,65 @@
   }
   function todayRec(p) { return p.days[today()] || null; }
   // A day holds two lesson slots. Older saves keyed lessons by topic.
+  // A day offers two preselected lessons; the user completes one of them.
+  // Older saves stored two required "slots" — still understood for history.
   function slots(d) {
     if (!d) return [];
-    if (!d.slots) d.slots = d.topics.map((t) => d.lessons[t]);
+    if (d.options) return d.choice && LESSON_BY_ID[d.choice] ? [d.choice] : [];
+    if (!d.slots) d.slots = (d.topics || []).map((t) => d.lessons[t]);
     return d.slots.filter((id) => LESSON_BY_ID[id]);
   }
   function isTodayLesson(p, id) {
-    return slots(todayRec(p)).includes(id);
+    const d = todayRec(p);
+    if (!d) return false;
+    if (d.options && !d.choice) return d.options.includes(id);
+    return slots(d).includes(id);
   }
   function canOpen(p, id) {
-    // The whole library is open; the daily mission sets the pace.
+    // The whole library is open; the daily lesson sets the pace.
     return !!LESSON_BY_ID[id];
   }
   function started(p, id) {
     const r = p.lessons[id];
     return !!r && (r.brief || Object.keys(r.modes).length > 0);
   }
-  // Alternatives offered when swapping a daily lesson.
-  function swapOptions(p, slot) {
-    const d = todayRec(p);
-    const cur = slots(d);
-    const curId = cur[slot];
-    const curTopic = LESSON_BY_ID[curId].topic;
-    const other = cur[1 - slot];
+  // Two lessons from different interests, favouring topics not studied lately.
+  function pickOptions(p, avoidTopics = []) {
+    const topics = suggestedTopics(p, 99);
     const out = [];
-    const t = TOPIC_BY_ID[curTopic];
-    const sameNext = t.lessons.find((l) => l.id !== curId && l.id !== other && !(p.lessons[l.id] && p.lessons[l.id].done));
-    if (sameNext) out.push(sameNext.id);
-    const usedTopics = new Set(cur.map((id) => LESSON_BY_ID[id].topic));
-    const pool = suggestedTopics(p, 99).filter((tid) => !usedTopics.has(tid));
-    for (const tid of pool) {
-      if (out.length >= 3) break;
+    const add = (tid) => {
+      if (out.length >= 2 || out.some((id) => LESSON_BY_ID[id].topic === tid)) return;
       const lid = pickLesson(p, tid);
-      if (lid && !cur.includes(lid)) out.push(lid);
-    }
+      if (lid) out.push(lid);
+    };
+    topics.filter((t) => !avoidTopics.includes(t)).forEach(add);
+    topics.forEach(add);
     return out;
   }
+  function ensureToday(p) {
+    let d = p.days[today()];
+    if (!d) {
+      d = p.days[today()] = { options: pickOptions(p), choice: null, done: false };
+      save();
+    } else if (!d.options) {
+      const old = slots(d);
+      d.options = old.slice(0, 2);
+      d.choice = old.find((id) => started(p, id)) || null;
+      delete d.slots;
+      save();
+    }
+    return d;
+  }
+  function chooseToday(p, id) {
+    const d = ensureToday(p);
+    if (!d.done && !d.choice && d.options.includes(id)) { d.choice = id; save(); }
+  }
   function suggestedTopics(p, n = 2) {
-    // Prefer interests studied least recently.
+    // Prefer interests studied least recently; break ties randomly.
     const last = {};
     Object.entries(p.days).forEach(([k, d]) => slots(d).forEach((id) => { const t = LESSON_BY_ID[id].topic; if (!last[t] || k > last[t]) last[t] = k; }));
     const pool = (p.interests.length >= 2 ? p.interests : TOPICS.map((t) => t.id)).filter((id) => TOPIC_BY_ID[id]);
-    return pool.slice().sort((a, b) => (last[a] || "").localeCompare(last[b] || "")).slice(0, n);
+    return shuffle(pool).sort((a, b) => (last[a] || "").localeCompare(last[b] || "")).slice(0, n);
   }
   function dueCards(p) {
     const t = today();
@@ -372,9 +398,11 @@
       const k = `${id}#${i}`;
       if (!p.cards[k]) p.cards[k] = { box: 1, due: addDays(today(), 1) };
     });
-    // Day complete?
+    // Day complete? Finishing either of today's options counts.
     const d = todayRec(p);
-    if (d && !d.done && slots(d).every((lid) => p.lessons[lid] && p.lessons[lid].done)) {
+    if (d && d.options && !d.choice && d.options.includes(id)) d.choice = id;
+    const ds = slots(d);
+    if (d && !d.done && ds.length && ds.every((lid) => p.lessons[lid] && p.lessons[lid].done)) {
       d.done = true;
       const t = today();
       if (p.streak.last === addDays(t, -1)) p.streak.count += 1;
@@ -382,7 +410,7 @@
       p.streak.last = t;
       p.streak.best = Math.max(p.streak.best, p.streak.count);
       const bonus = Math.min(p.streak.count * 5, 50);
-      award(p, XP.day + bonus, `Mission complete · ${p.streak.count}-day streak`);
+      award(p, XP.day + bonus, `Daily lesson complete · ${p.streak.count}-day streak`);
     }
   }
   function recordDrill(p, lessonId, mode, correct, total) {
@@ -579,7 +607,7 @@
       <section class="hero">
         <div class="label accent">A pocket university · one commute at a time</div>
         <h1>Learn something that matters, every day.</h1>
-        <p>${TOTAL_LESSONS} plain-English lessons across ${TOPICS.length} subjects — from AI and data systems to banking, history, HVAC and squash. Each day, pick two topics and learn the 20% that gets you 80% of the way.</p>
+        <p>${TOTAL_LESSONS} plain-English lessons across ${TOPICS.length} subjects — from AI and data systems to banking, history, HVAC and squash. Each day you get two hand-picked options — choose one and learn the 20% that gets you 80% of the way.</p>
       </section>
       <div class="feature-list">
         <div class="feature"><div class="f-ico">${I.brief}</div><div><b>Read</b><span>A short version, the full story in simple English, a real example and the common trap.</span></div></div>
@@ -617,7 +645,7 @@
     } else if (step === 2) {
       body = `
         ${pageHead("Step 2 of 3 · Interests", "Interests", { pager: [1, 3] })}
-        <p class="muted">Pick at least two — more is better. Each day you'll choose two of these to study, and you can browse every topic in the Library any time.</p>
+        <p class="muted">Pick at least two — more is better. Each day you'll get two lessons from these to choose between, and you can browse every topic in the Library any time.</p>
         <div style="margin-top:8px"><button class="link-btn" id="all-int">${draft.interests.length === TOPICS.length ? "Clear all" : "Select all"}</button></div>
         ${facultyGrid((t) => draft.interests.includes(t.id))}
         <div class="sticky-cta"><button class="btn primary block" id="next" ${draft.interests.length >= 2 ? "" : "disabled"}>Next ${I.chevR}</button></div>`;
@@ -721,17 +749,30 @@
   /* ---------------------------------------------------------
      View: Today (home / mission)
      --------------------------------------------------------- */
-  let pickDraft = null;
-  function vHome() {
-    const p = P();
+  // Photo card in the style of a travel/destination card: image, title, short
+  // pitch, and a solid action panel at the bottom for legibility.
+  function photoCard(p, id, o) {
+    const l = LESSON_BY_ID[id];
+    const t = TOPIC_BY_ID[l.topic];
+    const pitch = (l.hook || l.bluf || "").replace(/\s+/g, " ");
+    return `<article class="pcard ${o.cls || ""}" data-card="${id}" style="background-image:url('${topicImg(l.topic)}')">
+      <div class="pc-head"><span class="pc-kicker">${esc(o.label)}</span><span class="pc-chip">${l.minutes} min</span></div>
+      <div class="pc-body">
+        <div class="pc-topic">${topicIcon(l.topic)}<span>${esc(t.name)}</span></div>
+        <h2 class="pc-title">${esc(l.title)}</h2>
+        <p class="pc-sub">${esc(pitch)}</p>
+      </div>
+      <div class="pc-panel">
+        ${o.panelTop || `<div class="pc-feats"><span>${I.brief}Read</span><span>${I.bulb}Think</span><span>${I.flash}Drill</span><span class="pc-lv">${l.index + 1}/${t.lessons.length}</span></div>`}
+        ${o.cta}
+      </div>
+    </article>`;
+  }
+  function hudPanel(p) {
     const r = rankFor(p.xp);
-    const d = todayRec(p);
     const streak = streakNow(p);
-    const due = dueCards(p).length;
     const accuracy = p.stats.answered ? Math.round((100 * p.stats.correct) / p.stats.answered) : null;
-
-    const hud = `${pageHead(fmtDate(today()), "Today")}
-    <section class="panel brackets">
+    return `<section class="panel brackets">
       <div class="hud">
         <div class="lvl"><span class="label">Level</span><b class="mono-num">${r.i + 1}</b></div>
         <div>
@@ -747,37 +788,67 @@
         <div class="statcell"><span class="label">Accuracy</span><b>${accuracy === null ? "—" : accuracy + "<small>%</small>"}</b></div>
       </div>
     </section>`;
+  }
+
+  /* ---------------------------------------------------------
+     View: Today — two preselected lessons, pick one
+     --------------------------------------------------------- */
+  function vHome() {
+    const p = P();
+    const d = ensureToday(p);
+    const r = rankFor(p.xp);
+    const streak = streakNow(p);
+    const due = dueCards(p).length;
+    const h = new Date().getHours();
+    const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+
+    const head = `<section class="greet">
+      <div><div class="ph-kicker">${esc(fmtDate(today()))} //</div><h1 class="greet-title">${greet}, ${esc(p.callsign)}</h1></div>
+      <div class="hchips"><span class="hchip ${streak ? "hot" : ""}" title="Streak">${I.streak}<b class="mono-num">${streak}</b></span><span class="hchip" title="Level">LV<b class="mono-num">${r.i + 1}</b></span></div>
+    </section>`;
 
     let mission;
-    if (!d) {
-      if (!pickDraft || pickDraft.date !== today()) pickDraft = { date: today(), sel: suggestedTopics(p), all: false };
-      const only = pickDraft.all || p.interests.length < 2 ? null : p.interests;
-      mission = `<section class="section">
-        <div class="section-head"><h2>Plan today's mission</h2><span class="label hud">Pick 2</span></div>
-        <p class="muted small" style="margin:-4px 0 14px">Select <b>two</b> topics. You'll get one lesson from each — and can swap either one if it doesn't grab you.</p>
-        ${facultyGrid((t) => pickDraft.sel.includes(t.id), (t) => !pickDraft.sel.includes(t.id) && pickDraft.sel.length >= 2, only)}
-        <div style="margin:12px 0 16px">${p.interests.length < TOPICS.length ? `<button class="link-btn" id="toggle-all">${pickDraft.all ? "Show my interests only" : "Show all topics"}</button>` : ""}</div>
-        <button class="btn primary block" id="lockin" ${pickDraft.sel.length === 2 ? "" : "disabled"}>Lock in mission ${I.chevR}</button>
+    if (!d.choice) {
+      const opts = d.options;
+      mission = `<section class="today">
+        <div class="section-head"><h2>Today's lesson</h2><span class="label hud">Pick one</span></div>
+        <div class="carousel" id="opts">
+          ${opts.map((id, n) => photoCard(p, id, {
+            label: `Option ${"AB"[n]}`,
+            cta: `<button class="pc-btn" data-start="${id}">Start this lesson ${I.chevR}</button>`,
+          })).join("")}
+        </div>
+        <div class="car-foot"><span class="pager" id="pg">${opts.map((_, n) => `<i class="${n ? "" : "on"}"></i>`).join("")}</span>
+          <button class="link-btn" id="shuffle">${I.swap.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}Show two different options</button></div>
       </section>`;
     } else {
-      const ids = slots(d);
-      const anyStarted = ids.some((id) => started(p, id));
-      const firstOpen = ids.findIndex((id) => !(p.lessons[id] && p.lessons[id].done));
-      mission = `<section class="section">
-        <div class="section-head"><h2>Today's mission</h2><span class="label hud">${ids.filter((id) => p.lessons[id] && p.lessons[id].done).length} / ${ids.length} cleared</span></div>
-        ${d.done ? `<div class="panel complete-banner" style="margin-bottom:16px">${I.okc}<div><div class="label" style="color:var(--ok)">Mission complete</div><div>Both waypoints cleared. Streak: <b>${streak} day${streak === 1 ? "" : "s"}</b>. Come back tomorrow for your next mission.</div></div></div>` : ""}
-        <div class="route">
-          ${ids.map((id, n) => wpCard(p, id, n, n === firstOpen)).join("")}
-        </div>
-        ${!anyStarted ? `<div style="margin-top:12px"><button class="link-btn" id="replan">Start over with different topics</button></div>` : ""}
+      const id = d.choice;
+      const rec = p.lessons[id] || {};
+      const briefed = rec.brief;
+      const drilled = rec.modes && Object.keys(rec.modes).length > 0;
+      const done = rec.done;
+      const href = briefed ? `#/drill/${id}` : `#/lesson/${id}`;
+      const cta = done ? "Review lesson" : briefed ? "Continue to drill" : "Start this lesson";
+      const steps = `<div class="pc-steps">
+        <span class="${briefed ? "ok" : "on"}">Brief</span><span class="${drilled ? "ok" : briefed ? "on" : ""}">Drill</span><span class="${done ? "ok" : drilled ? "on" : ""}">Debrief</span></div>`;
+      const other = d.options.find((x) => x !== id);
+      mission = `<section class="today">
+        <div class="section-head"><h2>Today's lesson</h2><span class="label ${done ? "" : "hud"}" style="${done ? "color:var(--ok)" : ""}">${done ? "Complete ✓" : "In progress"}</span></div>
+        ${photoCard(p, id, {
+          label: done ? `Cleared · ${streak}-day streak` : "Your pick",
+          cls: done ? "is-done" : "single",
+          panelTop: steps,
+          cta: `<a class="pc-btn" href="${done ? `#/lesson/${id}` : href}">${cta} ${I.chevR}</a>`,
+        })}
+        <div class="car-foot">${!started(p, id) && !done && other ? `<button class="link-btn" id="switch">${I.swap.replace("<svg", '<svg style="width:15px;height:15px;display:inline;vertical-align:-3px;margin-right:4px"')}Switch to the other option</button>` : done && other ? `<a class="link-btn" href="#/lesson/${other}">Extra credit: ${esc(LESSON_BY_ID[other].title)} ${I.chevR.replace("<svg", '<svg style="width:14px;height:14px;display:inline;vertical-align:-2px"')}</a>` : "<span></span>"}</div>
       </section>`;
     }
 
-    // Talking points from today's lessons once they've been read.
-    const talks = d ? slots(d).filter((id) => p.lessons[id] && p.lessons[id].brief && LESSON_BY_ID[id].talk) : [];
-    const talkHtml = talks.length ? `<section class="section">
-      <div class="section-head"><h2>Bring it up today</h2><span class="label">Talking points</span></div>
-      ${talks.map((id) => `<div class="panel talk"><div class="talk-head">${I.chat}<div class="label accent">${esc(TOPIC_BY_ID[LESSON_BY_ID[id].topic].name)}</div></div><p>${esc(LESSON_BY_ID[id].talk)}</p></div>`).join("")}
+    // Talking point from today's lesson once it's been read.
+    const talkId = d.choice && p.lessons[d.choice] && p.lessons[d.choice].brief && LESSON_BY_ID[d.choice].talk ? d.choice : null;
+    const talkHtml = talkId ? `<section class="section">
+      <div class="section-head"><h2>Bring it up today</h2><span class="label">Talking point</span></div>
+      <div class="panel talk"><div class="talk-head">${I.chat}<div class="label accent">${esc(TOPIC_BY_ID[LESSON_BY_ID[talkId].topic].name)}</div></div><p>${esc(LESSON_BY_ID[talkId].talk)}</p></div>
     </section>` : "";
 
     const review = `<section class="section">
@@ -788,86 +859,41 @@
         <a class="drill-opt" href="#/review/blitz" style="text-decoration:none;color:inherit">
           <span class="d-ico">${I.timer}</span><span><b>Blitz</b><small>60 seconds. As many correct answers as you can.</small></span><span class="chev">${I.chevR}</span></a>
       </div>
-    </section>`;
+    </section>
+    <section class="section"><div class="section-head"><h2>Progress</h2><a class="label hud" href="#/logbook" style="text-decoration:none">Logbook ›</a></div>${hudPanel(p)}</section>`;
 
-    view(topbar(p) + hud + mission + talkHtml + review, "today");
+    view(topbar(p) + head + mission + talkHtml + review, "today");
 
-    $$("[data-topic]").forEach((b) => (b.onclick = () => {
-      const id = b.dataset.topic;
-      const s = pickDraft.sel;
-      pickDraft.sel = s.includes(id) ? s.filter((x) => x !== id) : s.length < 2 ? s.concat(id) : s;
-      vHome();
+    // Carousel pager follows native scroll-snap momentum.
+    const car = $("#opts");
+    if (car) {
+      let raf = 0;
+      car.addEventListener("scroll", () => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          const n = Math.round(car.scrollLeft / (car.firstElementChild.offsetWidth + 12));
+          $$("#pg i").forEach((x, k) => x.classList.toggle("on", k === n));
+        });
+      }, { passive: true });
+    }
+    $$("[data-start]").forEach((b) => (b.onclick = () => {
+      chooseToday(p, b.dataset.start);
+      go(`#/lesson/${b.dataset.start}`);
     }));
-    const ta = $("#toggle-all");
-    if (ta) ta.onclick = () => { pickDraft.all = !pickDraft.all; vHome(); };
-    const li = $("#lockin");
-    if (li) li.onclick = () => {
-      const [a, b] = pickDraft.sel;
-      const la = pickLesson(p, a);
-      const lb = pickLesson(p, b, la);
-      p.days[today()] = { slots: [la, lb], done: false };
-      save();
-      toast("Mission locked in");
-      vHome();
-    };
-    $$("[data-swap]").forEach((b) => (b.onclick = () => swapDialog(p, +b.dataset.swap)));
-    const rp = $("#replan");
-    if (rp) rp.onclick = () => {
-      pickDraft = { date: today(), sel: [...new Set(slots(todayRec(p)).map((id) => LESSON_BY_ID[id].topic))], all: false };
-      delete p.days[today()];
+    const sh = $("#shuffle");
+    if (sh) sh.onclick = () => {
+      const td = ensureToday(p);
+      td.options = pickOptions(p, td.options.map((x) => LESSON_BY_ID[x].topic));
       save();
       vHome();
     };
-  }
-  function wpCard(p, id, n, active) {
-    const l = LESSON_BY_ID[id];
-    const t = TOPIC_BY_ID[l.topic];
-    const rec = p.lessons[id];
-    const briefed = rec && rec.brief;
-    const drilled = rec && Object.keys(rec.modes).length > 0;
-    const done = rec && rec.done;
-    const href = briefed ? `#/drill/${id}` : `#/lesson/${id}`;
-    const cta = done ? "Review" : briefed ? "Continue to drill" : "Start brief";
-    return `<div class="wp ${done ? "done" : active ? "active" : ""}">
-      <span class="wp-node"></span>
-      <a class="panel wp-card" href="${href}">
-        <div class="wp-head"><span class="label ${active ? "accent" : ""}">Waypoint ${n + 1} · ${esc(t.name)}</span>
-          ${done ? `<span class="tag ok">Done</span>` : `<span class="tag">${l.minutes} min</span>`}</div>
-        <div class="wp-body" style="margin-top:10px">
-          ${ringIcon(topicIcon(l.topic), done ? 1 : drilled ? 2 / 3 : briefed ? 1 / 3 : 0)}
-          <div><div class="wp-title">${esc(l.title)}</div>
-          <div class="small muted">Lesson ${l.index + 1} of ${t.lessons.length} · ${l.level}</div></div>
-        </div>
-        <div class="wp-steps"><span class="wp-step ${briefed ? "ok" : active ? "on" : ""}"></span><span class="wp-step ${drilled ? "ok" : ""}"></span><span class="wp-step ${done ? "ok" : ""}"></span></div>
-        <div class="wp-foot"><span class="tiny muted">BRIEF · DRILL · DEBRIEF</span><span class="go">${cta} ${I.chevR}</span></div>
-      </a>
-      ${!started(p, id) && !done ? `<button class="swap-btn" data-swap="${n}">${I.swap} Not feeling it? Swap this lesson</button>` : ""}
-    </div>`;
-  }
-  function swapDialog(p, slot) {
-    const opts = swapOptions(p, slot);
-    const root = $("#modal-root");
-    root.innerHTML = `
-      <div class="modal-back" role="dialog" aria-modal="true" aria-labelledby="sw-title">
-        <div class="panel brackets modal" style="text-align:left">
-          <div class="label accent">Waypoint ${slot + 1}</div>
-          <h2 id="sw-title" style="margin-bottom:6px">Pick a different lesson</h2>
-          <p style="margin-bottom:14px">Swapping keeps your streak safe. Choose one:</p>
-          <div class="opt-list">${opts.map((id) => { const l = LESSON_BY_ID[id]; return `<button class="opt" data-pick="${id}">${topicIcon(l.topic)}<span><b>${esc(l.title)}</b><small>${esc(TOPIC_BY_ID[l.topic].name)} · ${l.minutes} min</small></span></button>`; }).join("")}</div>
-          <button class="btn ghost block" id="sw-cancel" style="margin-top:12px">Keep the current lesson</button>
-        </div>
-      </div>`;
-    const close = () => { root.innerHTML = ""; };
-    $("#sw-cancel").onclick = close;
-    $$("[data-pick]").forEach((b) => (b.onclick = () => {
-      const d = todayRec(p);
-      slots(d);
-      d.slots[slot] = b.dataset.pick;
+    const sw = $("#switch");
+    if (sw) sw.onclick = () => {
+      const td = ensureToday(p);
+      td.choice = null;
       save();
-      close();
-      toast("Lesson swapped");
       vHome();
-    }));
+    };
   }
 
   /* ---------------------------------------------------------
@@ -889,13 +915,19 @@
     if (!l || !canOpen(p, id)) return go("#/");
     const t = TOPIC_BY_ID[l.topic];
     const rec = lessonRec(p, id);
+    // Opening one of today's options counts as choosing it.
+    const td = todayRec(p);
+    if (td && td.options && !td.choice && td.options.includes(id)) chooseToday(p, id);
     const fromMission = isTodayLesson(p, id);
     const note = (p.notes && p.notes[id]) || "";
     view(`${topbar(p)}
-      <a class="back" href="${fromMission ? "#/" : "#/library"}">${I.back} ${fromMission ? "Mission" : "Library"}</a>
+      <a class="back" href="${fromMission ? "#/" : "#/library"}">${I.back} ${fromMission ? "Today" : "Library"}</a>
       ${tracker(1)}
-      ${pageHead(`${t.name} · Lesson ${l.index + 1} of ${t.lessons.length}`, l.title, { long: true })}
-      <div class="meta-row"><span class="tag">${l.level}</span><span class="tag">${l.minutes} min read</span>${rec.done ? '<span class="tag ok">Completed</span>' : ""}</div>
+      <header class="lhero" style="background-image:url('${topicImg(l.topic)}')">
+        <div class="pc-topic">${topicIcon(l.topic)}<span>${esc(t.name)} · Lesson ${l.index + 1} of ${t.lessons.length}</span></div>
+        <h1 class="lhero-title">${esc(l.title)}</h1>
+        <div class="lhero-meta"><span>${l.level}</span><span>${l.minutes} min read</span>${rec.done ? "<span>Completed ✓</span>" : ""}</div>
+      </header>
       ${l.hook ? `<p class="hook">${esc(l.hook)}</p>` : ""}
       <section class="panel bluf"><div class="label accent">The short version</div><p>${esc(l.bluf)}</p></section>
       ${l.story ? `<section class="section story"><div class="section-head"><h2>The full picture</h2></div>${storyHtml(l.story)}</section>` : ""}
@@ -1295,7 +1327,7 @@
           const doneN = t.lessons.filter((l) => p.lessons[l.id] && p.lessons[l.id].done).length;
           const mine = p.interests.includes(t.id);
           return `<details class="panel topic-block" ${q ? "open" : ""}>
-            <summary><div class="topic-row">${ringIcon(topicIcon(t.id), doneN / t.lessons.length, "sm")}
+            <summary class="tb-banner" style="background-image:url('${topicImg(t.id)}')"><div class="topic-row">${ringIcon(topicIcon(t.id), doneN / t.lessons.length, "sm")}
               <div style="flex:1"><h3>${esc(t.name)} ${mine ? '<span class="tag accent" style="margin-left:6px">Interest</span>' : ""}</h3>
               <div class="tiny muted">${doneN}/${t.lessons.length} complete</div>
               <div class="mini-bar"><span style="width:${(100 * doneN) / t.lessons.length}%"></span></div></div></div></summary>
@@ -1334,6 +1366,8 @@
     const earned = PATCHES.filter((b) => p.badges[b.id]).length;
     view(`${topbar(p)}
       ${pageHead("Service record", "Logbook")}
+      ${hudPanel(p)}
+      <div style="height:14px"></div>
       <section class="panel"><div class="statrow four" style="margin-top:0">
         <div class="statcell"><span class="label">Total XP</span><b class="accent">${p.xp}</b></div>
         <div class="statcell"><span class="label">Streak</span><b>${streakNow(p)}<small class="dim">/ ${p.streak.best} best</small></b></div>
@@ -1345,7 +1379,7 @@
         <div class="panel"><div class="heat">${cells.join("")}</div>
           <div class="tiny muted" style="display:flex;gap:14px;margin-top:10px;align-items:center">
             <span style="display:inline-flex;gap:6px;align-items:center"><i style="width:10px;height:10px;background:color-mix(in srgb,var(--accent) 40%,transparent);display:inline-block;border-radius:2px"></i>1 lesson</span>
-            <span style="display:inline-flex;gap:6px;align-items:center"><i style="width:10px;height:10px;background:var(--accent);display:inline-block;border-radius:2px"></i>Mission complete</span></div></div>
+            <span style="display:inline-flex;gap:6px;align-items:center"><i style="width:10px;height:10px;background:var(--accent);display:inline-block;border-radius:2px"></i>Daily lesson done</span></div></div>
       </section>
       <section class="section">
         <div class="section-head"><h2>Patches</h2><span class="label">${earned}/${PATCHES.length}</span></div>
@@ -1479,6 +1513,8 @@
     }
   }
   window.addEventListener("hashchange", route);
+  // Lets iOS apply :active styles on touch-down (instant press feedback).
+  document.addEventListener("touchstart", () => {}, { passive: true });
   route();
 
   // Offline support (only when served over http/https).

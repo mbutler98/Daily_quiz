@@ -7,7 +7,7 @@ A pocket university for your commute. Each day you pick **two topics** and get o
 ## How it works
 
 1. **Profile** – callsign, insignia, interests (grouped into faculties), preferred drill, light/dark theme. Multiple profiles per device.
-2. **Mission** – each day, pick 2 topics. Don't like a lesson? **Swap** it for another (same topic or a different interest) before you start — your streak stays safe.
+2. **Today** – the home screen opens on **two preselected lessons** (photo cards you can swipe between). Pick one and start — no scrolling needed. Finishing it completes the day and keeps your streak. Don't fancy either? Tap "Show two different options". Changed your mind before starting? "Switch to the other option".
 3. **Read** – every lesson has:
    - an opening **hook**
    - **the short version** (one-paragraph summary)
@@ -34,6 +34,10 @@ A pocket university for your commute. Each day you pick **two topics** and get o
 | Trades & Home | Carpentry (5), HVAC (5) |
 | Flight & Space | Aerospace & Flight (6) |
 | Sport & Body | Tennis (5), Squash (5), Strength Training (5) |
+
+## Photos
+
+Card and banner photos live in `img/` and are mapped to topics in `TOPIC_IMG` in `js/app.js`. Swap any file (keep the name, or update the map) to change the look. Note: the current images are game screenshots supplied for personal use — replace them with your own or openly licensed photos (e.g. Unsplash) if you share the site publicly.
 
 ## Adding content
 
