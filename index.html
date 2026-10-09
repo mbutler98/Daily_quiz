@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Waypoint — Daily Lessons</title>
+  <meta name="description" content="A daily, five-minute lesson in the topics you care about — AI, engineering, finance and more — with flashcards and quizzes.">
+  <meta name="theme-color" content="#0a0f17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Waypoint">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app" aria-live="polite"></div>
+  <nav id="tabbar" class="tabbar" hidden></nav>
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <div id="modal-root"></div>
+
+  <script>
+    /* Content registry: each file in /content calls WP.addTopic(). */
+    window.WP = { topics: [], addTopic: function (t) { this.topics.push(t); } };
+  </script>
+  <script src="content/ai.js"></script>
+  <script src="content/engineering.js"></script>
+  <script src="content/finance.js"></script>
+  <script src="content/aerospace.js"></script>
+  <script src="content/cyber.js"></script>
+  <script src="content/leadership.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
