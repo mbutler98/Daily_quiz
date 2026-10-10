@@ -25,12 +25,14 @@
   <div id="modal-root"></div>
 
   <script>
-    /* Content registry. Each file in /content calls WP.addTopic() or
-       WP.enrich() (extra material for lessons, keyed by lesson id). */
+    /* Content registry. Each file in /content calls WP.addTopic(),
+       WP.enrich() (extra material for lessons, keyed by lesson id) or
+       WP.addFigures() (charts, animations and videos for lessons). */
     window.WP = {
-      topics: [], extras: {},
+      topics: [], extras: {}, figs: {},
       addTopic: function (t) { this.topics.push(t); },
-      enrich: function (m) { for (var k in m) this.extras[k] = Object.assign(this.extras[k] || {}, m[k]); }
+      enrich: function (m) { for (var k in m) this.extras[k] = Object.assign(this.extras[k] || {}, m[k]); },
+      addFigures: function (m) { for (var k in m) (this.figs[k] = this.figs[k] || []).push(m[k]); }
     };
   </script>
   <script src="content/ai.js"></script>
@@ -57,6 +59,8 @@
   <script src="content/extras-eng.js"></script>
   <script src="content/extras-cfa.js"></script>
   <script src="content/extras-misc.js"></script>
+  <script src="content/visuals.js"></script>
+  <script src="js/visuals.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

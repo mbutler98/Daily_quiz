@@ -49,6 +49,11 @@
     chat: sv('<path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9.5h8M8 12.5h5"/>'),
     bulb: sv('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/>'),
     book: sv('<path d="M4 19.5V5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2Z"/><path d="M20 18v3H6a2 2 0 0 1-2-1.5"/>'),
+    // audio
+    speaker: sv('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
+    play: sv('<path d="M8 5v14l11-7Z" fill="currentColor"/>'),
+    pause: sv('<path d="M8 5v14M16 5v14" stroke-width="3"/>'),
+    snow: sv('<path d="M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8l16.4-9.6"/><path d="m9.5 4 2.5 2 2.5-2M9.5 20l2.5-2 2.5 2"/>'),
   };
   const TOPIC_ICON = {
     ai: sv('<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 9.5h5v5h-5z"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/>'),
@@ -111,19 +116,42 @@
   const TOPIC_BY_ID = {};
   const LESSON_BY_ID = {};
   const EXTRAS = WP.extras || {};
+  const FIGS = WP.figs || {};
   const words = (v) => (Array.isArray(v) ? v.join(" ") : typeof v === "object" && v ? Object.values(v).map(words).join(" ") : String(v || "")).split(/\s+/).length;
   TOPICS.forEach((t) => {
     TOPIC_BY_ID[t.id] = t;
     t.lessons.forEach((l, i) => {
       if (EXTRAS[l.id]) Object.assign(l, EXTRAS[l.id]);
+      (FIGS[l.id] || []).forEach((m) => addFigures(l, m));
       l.topic = t.id;
       l.index = i;
       // Reading time from the teaching text (~180 words/min on a phone).
-      const w = words([l.hook, l.bluf, l.story, l.points, l.example, l.pitfall, l.terms, l.talk]);
+      const w = words([l.hook, l.bluf, (l.story || []).filter((x) => typeof x === "string"), l.points, l.example, l.pitfall, l.terms, l.talk]);
       l.minutes = Math.max(3, Math.round(w / 180));
       LESSON_BY_ID[l.id] = l;
     });
   });
+  // Place figures from WP.addFigures(): at the end of a named section, after a
+  // paragraph, or at the end of the story. Extra quiz questions are appended.
+  function addFigures(l, m) {
+    const story = l.story = (l.story || []).slice();
+    (m.story || []).forEach((e) => {
+      const isStr = (x) => typeof x === "string";
+      let at = story.length;
+      if (e.section) {
+        const h = story.findIndex((x) => isStr(x) && x === "## " + e.section);
+        if (h < 0) console.warn(`Figure for ${l.id}: no section "${e.section}"`);
+        else { at = h + 1; while (at < story.length && !(isStr(story[at]) && story[at].startsWith("## "))) at++; }
+      } else if (e.after) {
+        const k = story.findIndex((x) => isStr(x) && x.startsWith(e.after));
+        if (k < 0) console.warn(`Figure for ${l.id}: no paragraph starting "${e.after}"`);
+        else at = k + 1;
+      }
+      story.splice(at, 0, e.fig);
+    });
+    if (m.mcq) l.mcq = (l.mcq || []).concat(m.mcq);
+    if (m.tf) l.tf = (l.tf || []).concat(m.tf);
+  }
   // Group topics by faculty; any topic not listed lands in "More".
   const listed = new Set(FACULTIES.flatMap((f) => f.topics));
   const extraTopics = TOPICS.filter((t) => !listed.has(t.id)).map((t) => t.id);
@@ -156,7 +184,10 @@
     day: 50,
     reviewPer: 2,
     blitzPer: 3,
+    recall: 10,
+    comboPer: 2,
   };
+  const FREEZE_MAX = 2;
   const DRILLS = {
     flash: { name: "Flashcards", desc: "Flip cards to lock in the key terms.", icon: I.flash },
     mcq: { name: "Multiple choice", desc: "Pick the right answer from four.", icon: I.mcq },
@@ -181,6 +212,7 @@
     { id: "topic", name: "Specialist", desc: "Finish every lesson in a topic", test: (p) => TOPICS.some((t) => t.lessons.every((l) => p.lessons[l.id] && p.lessons[l.id].done)) },
     { id: "dawn", name: "Dawn Patrol", desc: "Finish a lesson before 7am", test: (p) => !!p.flags.dawn },
     { id: "night", name: "Night Flyer", desc: "Finish a lesson after 10pm", test: (p) => !!p.flags.night },
+    { id: "double", name: "Doubled", desc: "Learn on 70 days — 1.01^70 ≈ 2×", test: (p) => learnDays(p) >= 70 },
   ];
 
   /* ---------------------------------------------------------
@@ -207,6 +239,10 @@
   const fmtDate = (key) => {
     const [y, m, d] = key.split("-").map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" }).toUpperCase();
+  };
+  const daysBetween = (a, b) => {
+    const [y1, m1, d1] = a.split("-").map(Number), [y2, m2, d2] = b.split("-").map(Number);
+    return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 864e5);
   };
   const uid = () => Math.random().toString(36).slice(2, 10);
   const vibrate = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* unsupported */ } };
@@ -244,12 +280,25 @@
       flags: {},
       notes: {},
       log: [],
+      activity: {},
+      actV: 1,
+      audio: { rate: 1, voice: "", auto: false, narrate: false },
     };
   }
   function normalise(p) {
     const base = newProfile(p.callsign || "PILOT");
+    const needsBackfill = !p.actV;
     for (const k of Object.keys(base)) if (p[k] === undefined) p[k] = base[k];
     p.stats = Object.assign(base.stats, p.stats);
+    p.audio = Object.assign(base.audio, p.audio);
+    if (p.streak.freezes == null) p.streak.freezes = 0;
+    // One-off: rebuild the activity grid from the XP log and finished days.
+    if (needsBackfill) {
+      p.activity = {};
+      p.log.forEach((e) => { p.activity[e.d] = (p.activity[e.d] || 0) + e.xp; });
+      Object.entries(p.days).forEach(([k, d]) => { if (d.done) p.activity[k] = Math.max(p.activity[k] || 0, XP.day); });
+      p.actV = 1;
+    }
     return p;
   }
   Object.values(db.profiles).forEach(normalise);
@@ -266,11 +315,19 @@
     const pct = next ? (xp - cur.xp) / (next.xp - cur.xp) : 1;
     return { i, cur, next, pct };
   }
-  function streakNow(p) {
-    const t = today();
-    if (p.streak.last === t || p.streak.last === addDays(t, -1)) return p.streak.count;
-    return 0;
+  // Days missed since the last finished day (0 = streak intact).
+  function missedDays(p) {
+    if (!p.streak.last) return Infinity;
+    return Math.max(0, daysBetween(p.streak.last, today()) - 1);
   }
+  // A streak survives missed days while there are enough freezes to cover them.
+  function streakNow(p) {
+    const m = missedDays(p);
+    return m <= (p.streak.freezes || 0) ? p.streak.count : 0;
+  }
+  // "1% better every day": every finished day compounds.
+  function learnDays(p) { return Object.values(p.days).filter((d) => d.done).length; }
+  function compound(n) { const x = Math.pow(1.01, n); return x < 10 ? x.toFixed(2) : x.toFixed(1); }
   function lessonRec(p, id) {
     if (!p.lessons[id]) p.lessons[id] = { brief: false, modes: {}, done: false, doneOn: null };
     return p.lessons[id];
@@ -363,6 +420,7 @@
     if (amount <= 0) return;
     const before = rankFor(p.xp).i;
     p.xp += amount;
+    p.activity[today()] = (p.activity[today()] || 0) + amount;
     p.log.unshift({ d: today(), t: reason, xp: amount });
     p.log = p.log.slice(0, 60);
     toast(`<b>+${amount} XP</b> ${esc(reason)}`, "xp");
@@ -405,12 +463,38 @@
     if (d && !d.done && ds.length && ds.every((lid) => p.lessons[lid] && p.lessons[lid].done)) {
       d.done = true;
       const t = today();
-      if (p.streak.last === addDays(t, -1)) p.streak.count += 1;
-      else if (p.streak.last !== t) p.streak.count = 1;
+      const missed = missedDays(p);
+      let froze = 0;
+      if (p.streak.last === t) { /* already counted */ }
+      else if (missed === 0) p.streak.count += 1;
+      else if (missed <= p.streak.freezes) {
+        // Spend freezes to bridge the gap; mark those days on the grid.
+        froze = missed;
+        p.streak.freezes -= missed;
+        for (let k = 1; k <= missed; k++) {
+          const key = addDays(t, -k);
+          if (!p.days[key]) p.days[key] = { frozen: true };
+          else p.days[key].frozen = true;
+        }
+        p.streak.count += 1;
+      } else p.streak.count = 1;
       p.streak.last = t;
       p.streak.best = Math.max(p.streak.best, p.streak.count);
       const bonus = Math.min(p.streak.count * 5, 50);
       award(p, XP.day + bonus, `Daily lesson complete · ${p.streak.count}-day streak`);
+      if (froze) toast(`Streak freeze used — your ${p.streak.count}-day streak is safe`);
+      // Every 7 days in a row earns a freeze (hold up to two).
+      if (p.streak.count % 7 === 0 && p.streak.freezes < FREEZE_MAX) {
+        p.streak.freezes++;
+        toast("Earned a streak freeze");
+      }
+      const n = learnDays(p);
+      queueModal({
+        icon: `<span class="m-big">1.01<sup>${n}</sup></span>`,
+        label: "Day complete",
+        title: `${p.streak.count}-day streak`,
+        text: `${n} day${n === 1 ? "" : "s"} of learning: 1.01^${n} = ${compound(n)}× where you started. Small steps, compounding.`,
+      });
     }
   }
   function recordDrill(p, lessonId, mode, correct, total) {
@@ -482,6 +566,135 @@
   }
 
   /* ---------------------------------------------------------
+     Audio: read-aloud with the device's built-in voices.
+     Text always stays on screen; audio is an extra way in.
+     Speech is chunked into sentences (long utterances get cut off in
+     some browsers) and a token guards against stale callbacks.
+     --------------------------------------------------------- */
+  const Speech = (() => {
+    const ok = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+    const synth = ok ? window.speechSynthesis : null;
+    let token = 0;
+    if (ok && synth.onvoiceschanged !== undefined) synth.onvoiceschanged = () => {};
+    function voices() {
+      if (!ok) return [];
+      const lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+      const all = synth.getVoices();
+      const mine = all.filter((v) => (v.lang || "").toLowerCase().startsWith(lang));
+      return mine.length ? mine : all.filter((v) => /^en/i.test(v.lang || ""));
+    }
+    function voice() {
+      const p = P();
+      const vs = voices();
+      if (p && p.audio.voice) { const v = vs.find((x) => x.voiceURI === p.audio.voice); if (v) return v; }
+      return vs.find((v) => /natural|premium|enhanced|neural/i.test(v.name))
+        || vs.find((v) => /google|samantha|daniel|karen|serena|moira|ava|allison/i.test(v.name))
+        || vs.find((v) => v.default) || vs[0] || null;
+    }
+    const sentences = (text) => (String(text).replace(/\s+/g, " ").match(/[^.!?…]+[.!?…]+["'”’)]*\s*|[^.!?…]+$/g) || [text]).map((x) => x.trim()).filter(Boolean);
+    // Speak text (all sentences), then call done. Returns nothing; stop() cancels.
+    function say(text, done) {
+      if (!ok || !text) { if (done) done(); return; }
+      const my = ++token;
+      synth.cancel();
+      const parts = sentences(text);
+      let i = 0;
+      const next = () => {
+        if (my !== token) return;
+        if (i >= parts.length) { if (done) done(); return; }
+        const u = new SpeechSynthesisUtterance(parts[i++]);
+        const v = voice();
+        if (v) { u.voice = v; u.lang = v.lang; }
+        u.rate = (P() && P().audio.rate) || 1;
+        u.onend = next;
+        u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") next(); };
+        synth.speak(u);
+      };
+      // Some engines drop a speak() issued straight after cancel().
+      setTimeout(next, 60);
+    }
+    function stop() { token++; if (ok) synth.cancel(); }
+    return { ok, say, stop, voices };
+  })();
+  WPV.speak = (text, done) => Speech.say(text, done);
+  WPV.stopSpeech = () => { Reader.stop(); Speech.stop(); };
+
+  // Lesson reader: walks every [data-say] block on the page in order,
+  // highlighting the one being read. Scenes play with narration in place.
+  const Reader = (() => {
+    let items = [], idx = 0, playing = false, bar = null;
+    const textOf = (el) => el.dataset.say || el.textContent;
+    function mark() {
+      items.forEach((el, i) => el.classList.toggle("speaking", playing && i === idx));
+      const el = items[idx];
+      if (playing && el) {
+        const r = el.getBoundingClientRect();
+        if (r.top < 70 || r.bottom > innerHeight - 150) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (bar) {
+        bar.querySelector("#rd-play").innerHTML = playing ? I.pause : I.play;
+        bar.querySelector("#rd-play").setAttribute("aria-label", playing ? "Pause" : "Play");
+        bar.querySelector("#rd-pos").textContent = items.length ? `${Math.min(idx + 1, items.length)} / ${items.length}` : "";
+        bar.querySelector("#rd-rate").textContent = ((P() && P().audio.rate) || 1) + "×";
+      }
+    }
+    function readCurrent() {
+      const el = items[idx];
+      if (!el) { stop(); idx = 0; mark(); return; }
+      mark();
+      const go = () => { if (playing) { idx++; readCurrent(); } };
+      if (el.classList.contains("scene") && el._play) { el._play(go); return; }
+      Speech.say(textOf(el), go);
+    }
+    function play(from) {
+      if (from != null) idx = from;
+      WPV.stopAll(); // may stop us via a playing scene, so set state after
+      playing = true;
+      readCurrent();
+    }
+    function pause() { playing = false; WPV.stopAll(); Speech.stop(); mark(); }
+    function stop() { playing = false; Speech.stop(); items.forEach((el) => el.classList.remove("speaking")); if (bar) mark(); }
+    function close() { stop(); if (bar) { bar.remove(); bar = null; } document.body.classList.remove("has-player"); }
+    // Build the player for the current page.
+    function open(root) {
+      items = $$("[data-say]", root);
+      idx = 0;
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.className = "player";
+        bar.setAttribute("role", "region");
+        bar.setAttribute("aria-label", "Read aloud");
+        bar.innerHTML = `<button class="pl-btn main" id="rd-play"></button>
+          <div class="pl-mid"><b>Listening</b><span class="tiny muted mono-num" id="rd-pos"></span></div>
+          <button class="pl-btn" id="rd-back" aria-label="Previous paragraph">${I.back}</button>
+          <button class="pl-btn" id="rd-fwd" aria-label="Next paragraph">${I.chevR}</button>
+          <button class="pl-btn rate" id="rd-rate" aria-label="Reading speed"></button>
+          <button class="pl-btn" id="rd-x" aria-label="Close player">${I.close}</button>`;
+        document.body.appendChild(bar);
+        document.body.classList.add("has-player");
+        bar.querySelector("#rd-play").onclick = () => (playing ? pause() : play());
+        bar.querySelector("#rd-back").onclick = () => play(Math.max(0, idx - 1));
+        bar.querySelector("#rd-fwd").onclick = () => play(Math.min(items.length - 1, idx + 1));
+        bar.querySelector("#rd-x").onclick = close;
+        bar.querySelector("#rd-rate").onclick = () => {
+          const p = P();
+          const rates = [0.9, 1, 1.15, 1.3, 1.5];
+          p.audio.rate = rates[(rates.indexOf(p.audio.rate) + 1) % rates.length] || 1;
+          save();
+          if (playing) play(); else mark();
+        };
+      }
+      // Tap any paragraph to jump there while the player is open.
+      items.forEach((el, i) => el.addEventListener("click", (e) => {
+        if (!bar || e.target.closest("button, a, input, textarea, summary, .s-ctrl")) return;
+        play(i);
+      }));
+      play(0);
+    }
+    return { open, close, stop, isOpen: () => !!bar };
+  })();
+
+  /* ---------------------------------------------------------
      Graphic generators (rank badges, patches, score ring)
      --------------------------------------------------------- */
   function rankBadge(i) {
@@ -518,6 +731,7 @@
     topic: '<path d="M14 20 24 14l10 6-10 6Z"/><path d="M18 23v6c3 3 9 3 12 0v-6"/>',
     dawn: '<path d="M13 31h22M17 31a7 7 0 0 1 14 0M24 15v4M14.5 20.5l2.5 2.5M33.5 20.5 31 23"/>',
     night: '<path d="M30 30a9 9 0 0 1-10-13 9 9 0 1 0 10 13Z"/>',
+    double: '<path d="M14 20a4 4 0 0 1 8 0c0 3-8 6-8 11h8M26 22l7 9M33 22l-7 9"/>',
   };
   function patchIcon(id, earned) {
     return `<svg viewBox="0 0 48 52" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -610,10 +824,10 @@
         <p>${TOTAL_LESSONS} plain-English lessons across ${TOPICS.length} subjects — from AI and data systems to banking, history, HVAC and squash. Each day you get two hand-picked options — choose one and learn the 20% that gets you 80% of the way.</p>
       </section>
       <div class="feature-list">
-        <div class="feature"><div class="f-ico">${I.brief}</div><div><b>Read</b><span>A short version, the full story in simple English, a real example and the common trap.</span></div></div>
+        <div class="feature"><div class="f-ico">${I.brief}</div><div><b>Read or listen</b><span>A short version, the full story in simple English, a real example and the common trap. Charts and animations where a picture helps, and a Listen button on every lesson.</span></div></div>
         <div class="feature"><div class="f-ico">${I.chat}</div><div><b>Think and talk</b><span>Questions to mull over on the ride, and one thing worth bringing up with a colleague.</span></div></div>
         <div class="feature"><div class="f-ico">${I.flash}</div><div><b>Drill</b><span>Flashcards, multiple choice, true/false and match-ups.</span></div></div>
-        <div class="feature"><div class="f-ico">${I.medal}</div><div><b>Progress</b><span>Earn XP, climb ranks, hold your streak and collect patches.</span></div></div>
+        <div class="feature"><div class="f-ico">${I.medal}</div><div><b>Progress</b><span>A daily log of every day you learn. 1% better a day compounds: 1.01³⁶⁵ ≈ 38×.</span></div></div>
       </div>
       <a class="btn primary block" href="#/setup">Create your profile ${I.chevR}</a>
       ${Object.keys(db.profiles).length ? `<div style="margin-top:12px"><a class="btn ghost block" href="#/pilots">Choose existing profile</a></div>` : ""}
@@ -768,6 +982,113 @@
       </div>
     </article>`;
   }
+  /* GitHub-style activity grid: one square per day, columns are weeks
+     (Sunday at the top), shaded by XP earned that day. */
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function dayLevel(p, key) {
+    const xp = p.activity[key] || 0;
+    const d = p.days[key];
+    if (!xp) return d && d.frozen ? "fz" : "";
+    let lv = xp >= 140 ? 4 : xp >= 80 ? 3 : xp >= 30 ? 2 : 1;
+    if (d && d.done) lv = Math.max(lv, 2);
+    return "l" + lv;
+  }
+  function dayTip(p, key) {
+    const [y, m, dd] = key.split("-").map(Number);
+    const label = new Date(y, m - 1, dd).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const d = p.days[key] || {};
+    const xp = p.activity[key] || 0;
+    const what = d.done ? "daily lesson done" : d.frozen ? "streak freeze" : xp ? "some practice" : "no activity";
+    return `${label} · ${xp ? xp + " XP · " : ""}${what}`;
+  }
+  function activityGrid(p, weeks, scroll) {
+    const t = today();
+    const [y, m, d] = t.split("-").map(Number);
+    const dow = new Date(y, m - 1, d).getDay();
+    const start = addDays(t, -(weeks - 1) * 7 - dow);
+    let cells = "", months = "", lastMonth = -1, lastLabel = -9;
+    for (let w = 0; w < weeks; w++) {
+      const col = addDays(start, w * 7);
+      const [cy, cm, cd] = col.split("-").map(Number);
+      if (cm !== lastMonth) {
+        const roomy = w > 0 || new Date(cy, cm, 0).getDate() - cd >= 13; // skip a stub first month
+        if (roomy && w - lastLabel >= 3) { months += `<span style="grid-column:${w + 1}">${MONTHS[cm - 1]}</span>`; lastLabel = w; }
+        lastMonth = cm;
+      }
+      for (let r = 0; r < 7; r++) {
+        const key = addDays(col, r);
+        if (key > t) { cells += `<i class="fut"></i>`; continue; }
+        cells += `<i class="${dayLevel(p, key)} ${key === t ? "today" : ""}" data-k="${key}" title="${esc(dayTip(p, key))}"></i>`;
+      }
+    }
+    const cols = scroll ? `repeat(${weeks}, 12px)` : `repeat(${weeks}, 1fr)`;
+    return `<div class="gh ${scroll ? "scroll" : ""}">
+      <div class="gh-days"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+      <div class="gh-main"><div class="gh-months" style="grid-template-columns:${cols}">${months}</div>
+        <div class="gh-grid" style="grid-template-columns:${cols}">${cells}</div></div>
+    </div>`;
+  }
+  function activityCard(p, weeks, scroll) {
+    const n = learnDays(p);
+    const streak = streakNow(p);
+    const fz = p.streak.freezes || 0;
+    const since = addDays(today(), -weeks * 7);
+    const active = Object.keys(p.activity).filter((k) => k > since && p.activity[k] > 0).length;
+    return `<div class="panel gh-card">
+      <div class="gh-head">
+        <span class="gh-stat ${streak ? "hot" : ""}">${I.streak}<b class="mono-num">${streak}</b> day streak</span>
+        <span class="gh-stat" title="Each finished day compounds 1%"><span>1.01<sup>${n}</sup></span> = <b class="mono-num">${compound(n)}×</b></span>
+      </div>
+      ${activityGrid(p, weeks, scroll)}
+      <div class="gh-foot">
+        <span class="gh-cap tiny muted" aria-live="polite">${active} active day${active === 1 ? "" : "s"} in ${weeks} weeks${fz ? ` · <span class="fz-note">${I.snow}${fz} freeze${fz === 1 ? "" : "s"}</span>` : ""}</span>
+        <span class="gh-legend tiny muted">Less<i></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>More</span>
+      </div>
+    </div>`;
+  }
+  function bindGrid(root) {
+    $$(".gh-grid [data-k]", root).forEach((c) => (c.onclick = () => {
+      const card = c.closest(".gh-card");
+      $$(".sel", card).forEach((x) => x.classList.remove("sel"));
+      c.classList.add("sel");
+      $(".gh-cap", card).textContent = dayTip(P(), c.dataset.k);
+    }));
+    $$(".gh.scroll .gh-main", root).forEach((el) => { el.scrollLeft = el.scrollWidth; });
+  }
+
+  /* One question from an earlier lesson, shown once today's lesson is done.
+     Pulling an old idea back out of memory is what makes it stick. */
+  function recallCard(p, d) {
+    if (!d.done) return "";
+    if (!d.recall) {
+      const pool = Object.keys(p.lessons)
+        .filter((id) => p.lessons[id].done && id !== d.choice && LESSON_BY_ID[id] && (LESSON_BY_ID[id].mcq || []).length)
+        .sort((a, b) => (p.lessons[a].doneOn || "").localeCompare(p.lessons[b].doneOn || ""));
+      if (!pool.length) return "";
+      const id = pool[Math.floor(Math.random() * Math.min(pool.length, 5))];
+      d.recall = { id, k: Math.floor(Math.random() * LESSON_BY_ID[id].mcq.length), ans: null };
+      save();
+    }
+    const l = LESSON_BY_ID[d.recall.id];
+    const q = l && l.mcq[d.recall.k];
+    if (!q) return "";
+    const answered = d.recall.ans != null;
+    const opts = answered ? q.a.map((text, i) => ({ text, i })) : shuffle(q.a.map((text, i) => ({ text, i })));
+    return `<section class="section" id="recall">
+      <div class="section-head"><h2>Quick recall</h2><span class="label">${answered ? (d.recall.ans === q.c ? "Nailed it" : "Reviewed") : `+${XP.recall} XP`}</span></div>
+      <div class="panel recall">
+        <div class="label accent">From ${esc(l.title)}</div>
+        ${q.fig ? WPV.render(q.fig, { compact: true, static: true }) : ""}
+        <p class="rc-q">${esc(q.q)}</p>
+        <div class="rc-opts">${opts.map((o) => {
+          const cls = !answered ? "" : o.i === q.c ? "correct" : o.i === d.recall.ans ? "wrong" : "dim";
+          return `<button class="answer sm ${cls}" data-rc="${o.i}" ${answered ? "disabled" : ""}><span>${esc(o.text)}</span></button>`;
+        }).join("")}</div>
+        ${answered ? `<p class="small muted" style="margin-top:10px">${esc(q.why || "")} <a href="#/lesson/${l.id}">Revisit the lesson</a></p>` : ""}
+      </div>
+    </section>`;
+  }
+
   function hudPanel(p) {
     const r = rankFor(p.xp);
     const streak = streakNow(p);
@@ -862,7 +1183,26 @@
     </section>
     <section class="section"><div class="section-head"><h2>Progress</h2><a class="label hud" href="#/logbook" style="text-decoration:none">Logbook ›</a></div>${hudPanel(p)}</section>`;
 
-    view(topbar(p) + head + mission + talkHtml + review, "today");
+    const log = `<section class="section">
+      <div class="section-head"><h2>Daily log</h2><a class="label hud" href="#/logbook" style="text-decoration:none">Full year ›</a></div>
+      ${activityCard(p, 20, false)}
+    </section>`;
+
+    view(topbar(p) + head + mission + log + recallCard(p, d) + talkHtml + review, "today");
+    WPV.mount($("#app"));
+    bindGrid($("#app"));
+    $$("[data-rc]").forEach((b) => (b.onclick = () => {
+      const k = +b.dataset.rc;
+      const q = LESSON_BY_ID[d.recall.id].mcq[d.recall.k];
+      d.recall.ans = k;
+      p.stats.answered++;
+      if (k === q.c) { p.stats.correct++; award(p, XP.recall, "Quick recall"); } else vibrate(60);
+      checkPatches(p);
+      save();
+      const y = window.scrollY;
+      vHome();
+      window.scrollTo(0, y);
+    }));
 
     // Carousel pager follows native scroll-snap momentum.
     const car = $("#opts");
@@ -905,9 +1245,11 @@
   }
   function storyHtml(story) {
     if (!story || !story.length) return "";
-    return story.map((para) => para.startsWith("## ")
-      ? `<h3 class="story-h">${esc(para.slice(3))}</h3>`
-      : `<p>${esc(para)}</p>`).join("");
+    return story.map((para) => typeof para === "object"
+      ? WPV.render(para)
+      : para.startsWith("## ")
+        ? `<h3 class="story-h" data-say>${esc(para.slice(3))}</h3>`
+        : `<p data-say>${esc(para)}</p>`).join("");
   }
   function vLesson(id) {
     const p = P();
@@ -928,34 +1270,38 @@
         <h1 class="lhero-title">${esc(l.title)}</h1>
         <div class="lhero-meta"><span>${l.level}</span><span>${l.minutes} min read</span>${rec.done ? "<span>Completed ✓</span>" : ""}</div>
       </header>
-      ${l.hook ? `<p class="hook">${esc(l.hook)}</p>` : ""}
-      <section class="panel bluf"><div class="label accent">The short version</div><p>${esc(l.bluf)}</p></section>
+      ${Speech.ok ? `<button class="listen" id="listen">${I.speaker}<span><b>Listen to this lesson</b><small>About ${Math.max(2, Math.round(l.minutes * 1.15))} min · the text stays on screen</small></span></button>` : ""}
+      ${l.hook ? `<p class="hook" data-say>${esc(l.hook)}</p>` : ""}
+      <section class="panel bluf" data-say="${esc("The short version. " + l.bluf)}"><div class="label accent">The short version</div><p>${esc(l.bluf)}</p></section>
       ${l.story ? `<section class="section story"><div class="section-head"><h2>The full picture</h2></div>${storyHtml(l.story)}</section>` : ""}
       <section class="section">
         <div class="section-head"><h2>${l.story ? "Remember these" : "The 80% you need"}</h2><span class="label">${l.points.length} points</span></div>
-        <div class="panel"><ol class="points">${l.points.map((x) => `<li><div><b>${esc(x.h)}</b><span>${esc(x.t)}</span></div></li>`).join("")}</ol></div>
+        <div class="panel"><ol class="points">${l.points.map((x) => `<li data-say="${esc(x.h + ". " + x.t)}"><div><b>${esc(x.h)}</b><span>${esc(x.t)}</span></div></li>`).join("")}</ol></div>
       </section>
       <section class="section">
-        <div class="panel callout field-ex">${I.cross}<div><div class="label hud">Real-world example</div><p>${esc(l.example)}</p></div></div>
-        <div class="panel callout warn">${I.warn}<div><div class="label" style="color:var(--bad)">Common trap</div><p>${esc(l.pitfall)}</p></div></div>
+        <div class="panel callout field-ex" data-say="${esc("Real-world example. " + l.example)}">${I.cross}<div><div class="label hud">Real-world example</div><p>${esc(l.example)}</p></div></div>
+        <div class="panel callout warn" data-say="${esc("Common trap. " + l.pitfall)}">${I.warn}<div><div class="label" style="color:var(--bad)">Common trap</div><p>${esc(l.pitfall)}</p></div></div>
       </section>
       <section class="section terms">
         <div class="section-head"><h2>Key terms</h2><span class="label">${l.terms.length} terms</span></div>
-        <div class="panel"><dl>${l.terms.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>
+        <div class="panel"><dl>${l.terms.map(([a, b]) => `<dt data-say="${esc(a + ": " + b)}">${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>
       </section>
       ${l.think ? `<section class="section">
         <div class="section-head"><h2>Think about it</h2><span class="label">On the ride in</span></div>
-        <div class="panel callout think">${I.bulb}<div><ol class="think-list">${l.think.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>
+        <div class="panel callout think">${I.bulb}<div><ol class="think-list">${l.think.map((q) => `<li data-say>${esc(q)}</li>`).join("")}</ol>
           <label class="label" for="note" style="display:block;margin-top:14px">Your notes</label>
           <textarea id="note" class="note" rows="3" placeholder="Jot down a thought — saved on this device.">${esc(note)}</textarea></div></div>
       </section>` : ""}
       ${l.talk ? `<section class="section">
         <div class="panel talk"><div class="talk-head">${I.chat}<div class="label accent">Talk about it</div></div>
-          <p>${esc(l.talk)}</p>
+          <p data-say="${esc("Talk about it. " + l.talk)}">${esc(l.talk)}</p>
           <button class="btn ghost" id="share" style="margin-top:12px">${I.share} Share</button></div>
       </section>` : ""}
       <div class="end-cta"><button class="btn primary block" id="done-brief">${rec.brief ? "Go to drill" : "Done reading — start drill"} ${I.chevR}</button></div>
     `, fromMission ? "today" : "library");
+    WPV.mount($("#app"));
+    const ls = $("#listen");
+    if (ls) ls.onclick = () => Reader.open($("#app"));
     const ta = $("#note");
     if (ta) ta.addEventListener("input", () => {
       p.notes = p.notes || {};
@@ -1035,9 +1381,12 @@
     if (!l || !DRILLS[mode] || !canOpen(p, id)) return go("#/");
     renderTabs(null);
     const back = `#/drill/${id}`;
-    const finish = (c, n) => {
-      const xp = recordDrill(p, id, mode, c, n);
-      resultView({ c, n, xp, title: DRILLS[mode].name, backHref: back, againHref: `#/run/${id}/${mode}`, nextLabel: "Back to drills" });
+    const finish = (c, n, combo = 0) => {
+      const first = !lessonRec(p, id).modes[mode];
+      let xp = recordDrill(p, id, mode, c, n);
+      // Answer three or more in a row on a first run for a small bonus.
+      if (first && combo >= 3) { award(p, combo * XP.comboPer, `Combo ×${combo}`); xp += combo * XP.comboPer; save(); }
+      resultView({ c, n, xp, combo, title: DRILLS[mode].name, backHref: back, againHref: `#/run/${id}/${mode}`, nextLabel: "Back to drills" });
     };
     if (mode === "mcq") runChoice(l.mcq.map((q) => toMcq(q)), DRILLS.mcq.name, back, finish);
     if (mode === "tf") runChoice(l.tf.map(toTf), DRILLS.tf.name, back, finish);
@@ -1046,29 +1395,38 @@
   }
   const toMcq = (q) => {
     const opts = shuffle(q.a.map((text, i) => ({ text, ok: i === q.c })));
-    return { kind: "mcq", q: q.q, opts, why: q.why };
+    return { kind: "mcq", q: q.q, opts, why: q.why, fig: q.fig };
   };
-  const toTf = (q) => ({ kind: "tf", q: q.s, opts: [{ text: "True", ok: q.v === true }, { text: "False", ok: q.v === false }], why: q.why });
+  const toTf = (q) => ({ kind: "tf", q: q.s, opts: [{ text: "True", ok: q.v === true }, { text: "False", ok: q.v === false }], why: q.why, fig: q.fig });
+  const qFig = (it) => (it.fig ? WPV.render(it.fig, { compact: true, static: true }) : "");
+  const sayBtn = () => (Speech.ok ? `<button class="say-q" id="say-q" aria-label="Read question aloud">${I.speaker}</button>` : "");
+  const questionText = (it) => it.q + (it.kind === "tf" ? " True or false?" : " " + it.opts.map((o, k) => `${"ABCD"[k]}: ${o.text}.`).join(" "));
 
   // Shared engine for multiple choice and true/false.
   function runChoice(items, title, back, finish) {
     items = shuffle(items);
-    let i = 0, correct = 0;
+    let i = 0, correct = 0, combo = 0, best = 0;
+    const p = P();
     const render = () => {
       const it = items[i];
-      $("#app").innerHTML = `<div class="view">${runnerShell(title, i, items.length)}
-        <div class="question">${esc(it.q)}</div>
+      $("#app").innerHTML = `<div class="view">${runnerShell(title, i, items.length, `${combo >= 2 ? `<span class="combo mono-num">${I.bolt}×${combo}</span>` : ""}<span class="counter mono-num">${i + 1}/${items.length}</span>`)}
+        ${qFig(it)}
+        <div class="q-row"><div class="question">${esc(it.q)}</div>${sayBtn()}</div>
         <div class="answers ${it.kind === "tf" ? "tf" : ""}">
           ${it.opts.map((o, k) => `<button class="answer" data-k="${k}">${it.kind === "tf" ? "" : `<span class="key">${"ABCD"[k]}</span>`}<span>${esc(o.text)}</span></button>`).join("")}
         </div>
         <div id="fb"></div></div>`;
       bindQuit(back);
+      WPV.mount($("#app"));
+      const sq = $("#say-q");
+      if (sq) sq.onclick = () => Speech.say(questionText(it));
+      if (p.audio.auto) Speech.say(questionText(it));
       $$(".answer").forEach((b) => (b.onclick = () => answer(+b.dataset.k)));
     };
     const answer = (k) => {
       const it = items[i];
       const ok = it.opts[k].ok;
-      if (ok) correct++; else vibrate(60);
+      if (ok) { correct++; combo++; best = Math.max(best, combo); } else { combo = 0; vibrate(60); }
       $$(".answer").forEach((b, j) => {
         b.disabled = true;
         if (it.opts[j].ok) b.classList.add("correct");
@@ -1076,11 +1434,12 @@
         else b.classList.add("dim");
       });
       const last = i === items.length - 1;
-      $("#fb").innerHTML = `<div class="feedback ${ok ? "ok" : "bad"}"><div class="label">${ok ? "Correct" : "Not quite"}</div><div>${esc(it.why)}</div></div>
+      $("#fb").innerHTML = `<div class="feedback ${ok ? "ok" : "bad"}"><div class="label">${ok ? (combo >= 2 ? `Correct · ${combo} in a row` : "Correct") : "Not quite"}</div><div>${esc(it.why)}</div></div>
         <div class="runner-cta"><button class="btn primary block" id="nx">${last ? "See results" : "Next"} ${I.chevR}</button></div>`;
+      if (p.audio.auto) Speech.say(`${ok ? "Correct." : "Not quite."} ${it.why}`);
       $("#nx").focus({ preventScroll: true });
       $("#nx").scrollIntoView({ behavior: "smooth", block: "nearest" });
-      $("#nx").onclick = () => { if (last) finish(correct, items.length); else { i++; render(); window.scrollTo(0, 0); } };
+      $("#nx").onclick = () => { Speech.stop(); if (last) finish(correct, items.length, best); else { i++; render(); window.scrollTo(0, 0); } };
     };
     render();
   }
@@ -1160,7 +1519,7 @@
     render();
   }
 
-  function resultView({ c, n, xp, title, backHref, againHref, nextLabel, note }) {
+  function resultView({ c, n, xp, title, backHref, againHref, nextLabel, note, combo }) {
     const pct = n ? c / n : 1;
     const head = pct === 1 ? "Perfect run" : pct >= 0.8 ? "Strong work" : pct >= 0.5 ? "Good progress" : "Keep at it";
     const sub = pct === 1 ? "Every answer on target." : pct >= 0.8 ? "You've got the core of this." : pct >= 0.5 ? "Review the brief and run it again to lock it in." : "Re-read the brief, then try again — repetition is how it sticks.";
@@ -1173,6 +1532,7 @@
         <h2>${head}</h2>
         <p class="muted" style="margin-top:6px">${esc(note || sub)}</p>
         ${xp ? `<div class="xp-pill">${I.bolt.replace("<svg", '<svg style="width:16px;height:16px"')} +${xp} XP</div>` : ""}
+        ${combo >= 3 ? `<div class="tiny muted" style="margin-top:8px">Best run: ${combo} in a row</div>` : ""}
       </div>
       <div class="btn-row" style="margin-top:24px">
         <a class="btn" href="${againHref}">Run again</a>
@@ -1277,6 +1637,7 @@
       if (i >= pool.length) { pool = pool.concat(shuffle(pool)); }
       const it = pool[i];
       $("#app").innerHTML = `<div class="view">${runnerShell("Blitz · " + score + " correct", 60 - left, 60, `<span class="timer ${left <= 10 ? "low" : ""}" id="tm">${left}s</span>`)}
+        ${qFig(it)}
         <div class="question">${esc(it.q)}</div>
         <div class="answers ${it.kind === "tf" ? "tf" : ""}">
           ${it.opts.map((o, k) => `<button class="answer" data-k="${k}">${it.kind === "tf" ? "" : `<span class="key">${"ABCD"[k]}</span>`}<span>${esc(o.text)}</span></button>`).join("")}
@@ -1355,17 +1716,14 @@
     const p = P();
     const r = rankFor(p.xp);
     const acc = p.stats.answered ? Math.round((100 * p.stats.correct) / p.stats.answered) + "%" : "—";
-    const t = today();
-    const cells = [];
-    for (let k = 27; k >= 0; k--) {
-      const key = addDays(t, -k);
-      const d = p.days[key];
-      const lvl = d ? (d.done ? 2 : slots(d).some((id) => p.lessons[id] && p.lessons[id].doneOn === key) ? 1 : 0) : 0;
-      cells.push(`<i class="${lvl ? "l" + lvl : ""} ${k === 0 ? "today" : ""}" title="${key}"></i>`);
-    }
     const earned = PATCHES.filter((b) => p.badges[b.id]).length;
     view(`${topbar(p)}
       ${pageHead("Service record", "Logbook")}
+      <section style="margin-top:18px">
+        <div class="section-head"><h2>Last 12 months</h2><span class="label">${learnDays(p)} days learned</span></div>
+        ${activityCard(p, 53, true)}
+      </section>
+      <div style="height:14px"></div>
       ${hudPanel(p)}
       <div style="height:14px"></div>
       <section class="panel"><div class="statrow four" style="margin-top:0">
@@ -1374,13 +1732,6 @@
         <div class="statcell"><span class="label">Lessons</span><b>${p.stats.lessons}<small class="dim">/${TOTAL_LESSONS}</small></b></div>
         <div class="statcell"><span class="label">Accuracy</span><b>${acc}</b></div>
       </div></section>
-      <section class="section">
-        <div class="section-head"><h2>Last 4 weeks</h2><span class="label">${Object.values(p.days).filter((d) => d.done).length} missions</span></div>
-        <div class="panel"><div class="heat">${cells.join("")}</div>
-          <div class="tiny muted" style="display:flex;gap:14px;margin-top:10px;align-items:center">
-            <span style="display:inline-flex;gap:6px;align-items:center"><i style="width:10px;height:10px;background:color-mix(in srgb,var(--accent) 40%,transparent);display:inline-block;border-radius:2px"></i>1 lesson</span>
-            <span style="display:inline-flex;gap:6px;align-items:center"><i style="width:10px;height:10px;background:var(--accent);display:inline-block;border-radius:2px"></i>Daily lesson done</span></div></div>
-      </section>
       <section class="section">
         <div class="section-head"><h2>Patches</h2><span class="label">${earned}/${PATCHES.length}</span></div>
         <div class="patches">${PATCHES.map((b) => `<div class="patch ${p.badges[b.id] ? "" : "locked"}"><div class="p-ico">${patchIcon(b.id, !!p.badges[b.id])}</div><b>${b.name}</b><small>${b.desc}</small></div>`).join("")}</div>
@@ -1393,6 +1744,7 @@
         <div class="section-head"><h2>Recent activity</h2></div>
         <div class="panel">${p.log.length ? `<ul class="log">${p.log.slice(0, 15).map((e) => `<li><span><span class="tiny muted">${e.d.slice(5)}</span>&nbsp; ${esc(e.t)}</span><span class="xp">+${e.xp}</span></li>`).join("")}</ul>` : `<p class="muted small">No activity yet. Complete today's mission to start your log.</p>`}</div>
       </section>`, "logbook");
+    bindGrid($("#app"));
   }
 
   /* ---------------------------------------------------------
@@ -1420,6 +1772,21 @@
           <div class="seg"><button data-mode-theme="dark" aria-pressed="${p.theme === "dark"}">Dark</button><button data-mode-theme="light" aria-pressed="${p.theme === "light"}">Light</button></div>
         </div>
       </section>
+      ${Speech.ok ? `<section class="section">
+        <div class="section-head"><h2>Audio</h2></div>
+        <div class="panel">
+          <p class="muted small" style="margin-bottom:12px">Every lesson has a Listen button. Text always stays on screen, so you can read, listen, or both.</p>
+          <div class="label" style="margin-bottom:8px">Reading speed</div>
+          <div class="seg">${[0.9, 1, 1.15, 1.3, 1.5].map((r) => `<button data-rate="${r}" aria-pressed="${p.audio.rate === r}">${r}×</button>`).join("")}</div>
+          <label class="label" for="voice" style="display:block;margin:16px 0 8px">Voice</label>
+          <select class="input" id="voice"><option value="">Automatic (best available)</option></select>
+          <div class="toggle-row"><span><b>Read quiz questions aloud</b><small>Questions, answers and feedback</small></span>
+            <div class="seg sm"><button data-auto="1" aria-pressed="${!!p.audio.auto}">On</button><button data-auto="0" aria-pressed="${!p.audio.auto}">Off</button></div></div>
+          <div class="toggle-row"><span><b>Narrate animations</b><small>When you press Play on an animated figure</small></span>
+            <div class="seg sm"><button data-narr="1" aria-pressed="${!!p.audio.narrate}">On</button><button data-narr="0" aria-pressed="${!p.audio.narrate}">Off</button></div></div>
+          <button class="btn ghost" id="voice-test" style="margin-top:14px">${I.speaker} Test voice</button>
+        </div>
+      </section>` : ""}
       <section class="section">
         <div class="section-head"><h2>Profiles</h2></div>
         <div class="btn-row"><a class="btn" href="#/pilots">Switch profile</a><a class="btn" href="#/setup">${I.plus} New</a></div>
@@ -1437,6 +1804,20 @@
       <p class="footer-note">Waypoint · ${TOPICS.length} topics · ${TOTAL_LESSONS} lessons</p>`, "profile");
 
     $$("[data-mode-theme]").forEach((b) => (b.onclick = () => { p.theme = b.dataset.modeTheme; save(); applyTheme(); vProfile(); }));
+    $$("[data-rate]").forEach((b) => (b.onclick = () => { p.audio.rate = +b.dataset.rate; save(); $$("[data-rate]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("[data-auto]").forEach((b) => (b.onclick = () => { p.audio.auto = b.dataset.auto === "1"; save(); $$("[data-auto]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("[data-narr]").forEach((b) => (b.onclick = () => { p.audio.narrate = b.dataset.narr === "1"; WPV.narrate = p.audio.narrate; save(); $$("[data-narr]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    const vs = $("#voice");
+    if (vs) {
+      // Voices load asynchronously in some browsers.
+      const fill = () => {
+        vs.innerHTML = `<option value="">Automatic (best available)</option>` + Speech.voices().map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === p.audio.voice ? "selected" : ""}>${esc(v.name)} (${esc(v.lang)})</option>`).join("");
+      };
+      fill();
+      if (!Speech.voices().length) setTimeout(fill, 600);
+      vs.onchange = () => { p.audio.voice = vs.value; save(); };
+      $("#voice-test").onclick = () => Speech.say("Learn something new every day. One percent better, compounding.");
+    }
     $("#export").onclick = () => {
       const blob = new Blob([JSON.stringify({ app: "waypoint", version: 1, profile: p }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
@@ -1486,10 +1867,14 @@
   }
   function route() {
     cleanupRunner();
+    Reader.close();
+    WPV.stopAll();
+    Speech.stop();
     const parts = (location.hash.replace(/^#\/?/, "") || "").split("/");
     const [r, a, b] = parts;
     const p = P();
     applyTheme();
+    WPV.narrate = !!(p && p.audio.narrate);
     if (r !== "setup" && r !== "edit") draft = null;
     if (!p) {
       if (r === "setup") return vSetup(a, false);
